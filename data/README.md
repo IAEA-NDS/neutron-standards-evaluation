@@ -3,7 +3,8 @@
 The database file `data2017.gma` was used in the
 [STD2017 evaluation][std2017-paper]. The file
 `data2017.json` contains the same information but
-stored in JSON format.
+stored in JSON format. The resulting evaluations
+are stored in the `std2017/` directory.
 
 The database file `data.json` contains compared
 to `data2017.json` the following updates:
