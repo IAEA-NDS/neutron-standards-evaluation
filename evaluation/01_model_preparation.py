@@ -1,3 +1,4 @@
+import re
 import pandas as pd
 from scipy.sparse import block_diag, csr_matrix
 import numpy as np
@@ -56,13 +57,33 @@ exp_remove_mask = (exptable.NODE == 'exp_722') & (exptable.ENERGY > 23)  # Ponkr
 exp_remove_mask |= (exptable.NODE == 'exp_8008')  # removal of Nolte abs. U8(n,f) measurement (34 - 200 MeV)
 exp_remove_mask |= (exptable.NODE == 'exp_874') & (exptable.ENERGY > 23)  # Ponkratov U8(n,f) shape beyond 23 MeV
 exp_remove_mask |= (exptable.NODE == 'exp_524') & (exptable.ENERGY > 27)  # A.D. Carlson PU5(n,f) above 27 MeV
+# remove due to recommendation in excel sheet
+exp_remove_mask |= (exptable.NODE == 'exp_8029')
+
 exp_keep_idcs = np.where(~exp_remove_mask)[0]
 exptable = exptable.loc[exp_keep_idcs].reset_index(drop=True)
 expcov = csr_matrix(expcov.toarray()[np.ix_(exp_keep_idcs, exp_keep_idcs)])
 # variation-01 end
 
-# For testing: perturb one dataset and see if we get a change
-# exptable.loc[exptable.NODE == 'exp_1025', 'DATA'] *= 1.5
+# implement the recommendations of the excel sheet,
+# except the recommendation to convert the
+# Cance 1978 Pu9, U8, U5 absolute cross sections to ratios
+def replace_mt(node, old_mt, new_mt):
+    """Change the data type (given by MT) of a dataset."""
+    t = exptable.loc[exptable.NODE == node, 'REAC']
+    t = t.str.replace(rf'^MT:{old_mt}', f'MT:{new_mt}', regex=True)
+    exptable.loc[exptable.NODE == node, 'REAC'] = t
+
+replace_mt('exp_602', 3, 4)
+replace_mt('exp_685', 3, 4)
+replace_mt('exp_605', 3, 4)
+replace_mt('exp_666', 3, 4)
+replace_mt('exp_600', 3, 4)
+replace_mt('exp_608', 3, 4)
+replace_mt('exp_631', 3, 4)
+replace_mt('exp_1012', 3, 4)
+replace_mt('exp_6001', 4, 3)
+
 
 # initialize the normalization errors
 priortable, priorcov = attach_shape_prior((priortable, exptable), covmat=priorcov, raise_if_exists=False)
