@@ -43,6 +43,15 @@ db_path = '../data/data.json'
 db = read_gma_database(db_path)
 remove_dummy_datasets(db['datablock_list'])
 
+# remove correlations between exp_6000 and exp_6001 (NIFFTE TPC U8/U5 and Pu9/U5 fission xs ratio)
+niffte_block = db['datablock_list'][0]['datasets']
+assert niffte_block[0]['NS'] == 6000
+assert niffte_block[1]['NS'] == 6001
+del niffte_block[1]['NCSST']
+del niffte_block[1]['NEC']
+del niffte_block[1]['FCFC']
+
+
 priortable = create_prior_table(db['prior_list'])
 priorcov = create_prior_covmat(db['prior_list'])
 
@@ -57,6 +66,7 @@ exp_remove_mask |= (exptable.NODE == 'exp_8008')  # removal of Nolte abs. U8(n,f
 exp_remove_mask |= (exptable.NODE == 'exp_874') & (exptable.ENERGY > 23)  # Ponkratov U8(n,f) shape beyond 23 MeV
 exp_remove_mask |= (exptable.NODE == 'exp_524') & (exptable.ENERGY > 27)  # A.D. Carlson PU5(n,f) above 27 MeV
 exp_keep_idcs = np.where(~exp_remove_mask)[0]
+niffte_tpc_idcs = np.where(exptable.NODE == "exp_6001")[0]
 exptable = exptable.loc[exp_keep_idcs].reset_index(drop=True)
 expcov = csr_matrix(expcov.toarray()[np.ix_(exp_keep_idcs, exp_keep_idcs)])
 # variation-01 end
@@ -78,8 +88,14 @@ expcov_list, idcs_tuples = create_datablock_covmat_list(db['datablock_list'], re
 # variation-01: remove certain points in datablocks
 for i in range(len(expcov_list)):
     cur_idcs = np.arange(idcs_tuples[i][0], idcs_tuples[i][1]+1)
-    cur_idcs = cur_idcs[np.isin(cur_idcs, exp_keep_idcs)] - idcs_tuples[i][0]
-    expcov_list[i] = csr_matrix(expcov_list[i].toarray()[np.ix_(cur_idcs, cur_idcs)])
+    is_niffte_tpc = np.isin(cur_idcs, niffte_tpc_idcs)
+    should_keep = np.isin(cur_idcs, exp_keep_idcs)
+    is_niffte_tpc = is_niffte_tpc[should_keep]
+    cur_idcs = cur_idcs[should_keep] - idcs_tuples[i][0]
+    cur_mat = expcov_list[i].toarray()[np.ix_(cur_idcs, cur_idcs)]
+    cur_mat[np.ix_(is_niffte_tpc, is_niffte_tpc)] /= 2.0
+    expcov_list[i] = csr_matrix(cur_mat)
+
 
 expcov_list = [x for x in expcov_list if x.shape != (0, 0)]
 
