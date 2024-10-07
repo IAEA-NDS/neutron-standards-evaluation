@@ -56,6 +56,7 @@ exp_remove_mask = (exptable.NODE == 'exp_722') & (exptable.ENERGY > 23)  # Ponkr
 exp_remove_mask |= (exptable.NODE == 'exp_8008')  # removal of Nolte abs. U8(n,f) measurement (34 - 200 MeV)
 exp_remove_mask |= (exptable.NODE == 'exp_874') & (exptable.ENERGY > 23)  # Ponkratov U8(n,f) shape beyond 23 MeV
 exp_remove_mask |= (exptable.NODE == 'exp_524') & (exptable.ENERGY > 27)  # A.D. Carlson PU5(n,f) above 27 MeV
+exp_remove_mask |= (exptable.NODE == 'exp_6001')  # remove NIFFTE TPC data Pu9(n,f)/U5(n,f)
 exp_keep_idcs = np.where(~exp_remove_mask)[0]
 exptable = exptable.loc[exp_keep_idcs].reset_index(drop=True)
 expcov = csr_matrix(expcov.toarray()[np.ix_(exp_keep_idcs, exp_keep_idcs)])
