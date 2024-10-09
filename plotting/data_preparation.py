@@ -78,8 +78,8 @@ def prepare_result_data(git_hash):
     # construct one datatable with std2017 data and newest
     eval_mcmc = np.mean(prop_chain, axis=0)
     eval_mcmc_unc = np.std(prop_chain, axis=0)
-    std2017_dt['NEW'] = eval_mcmc
-    std2017_dt['NEWUNC'] = eval_mcmc_unc
+    std2017_dt['POST'] = eval_mcmc
+    std2017_dt['POSTUNC'] = eval_mcmc_unc
     eval_maxlike = restrmap_prop(optres.position[:len(red_priortable)])
     std2017_dt['MAXLIKE'] = eval_maxlike
 
