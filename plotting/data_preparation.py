@@ -27,6 +27,8 @@ def load_evaluation(git_hash, label, color, style):
         'label': label ,
         'color': color,
         'style': style,
+        'exptable': dfs['exptable'],
+        'pred_sacs_dt': dfs['pred_sacs_dt'],
     }
 
 
@@ -59,6 +61,32 @@ def prepare_result_data(git_hash):
 
     std2017_dt, descr_list = load_std2017_data()
 
+    # calculate the SACS data
+    pred_sacs_dt = pd.DataFrame({
+        'NODE': ['exp_' + str(i) for i in range(1000, 1003)],
+        'REAC': ['MT:6-R1:' + str(r) for r in (8,9,10)] ,
+        'ENERGY': [0] * 3,
+    })
+
+    compmap_sacs = CompoundMap((priortable, pred_sacs_dt), reduce=True)
+    restrmap_sacs = RestrictedMap(
+        len(is_adj), compmap_sacs.propagate, compmap_sacs.jacobian,
+        fixed_params=priortable.loc[~is_adj, 'PRIOR'].to_numpy(copy=True),
+        fixed_params_idcs=np.where(~is_adj)[0]
+    )
+    restrmap_prop_sacs = tf.function(restrmap_sacs.propagate)
+
+    prop_chain_sacs = np.zeros((chain.shape[0], len(pred_sacs_dt)), dtype=np.float64)
+    for idx in range(chain.shape[0]):
+        curchain = chain[idx, :len(red_priortable)]
+        prop_chain_sacs[idx, :] = restrmap_prop_sacs(curchain)
+
+    sacs_values = np.mean(prop_chain_sacs, axis=0)
+    sacs_uncs = np.std(prop_chain_sacs, axis=0)
+
+    pred_sacs_dt['POST'] = sacs_values
+    pred_sacs_dt['POSTUNC'] = sacs_uncs
+
     # create the mapping object
     compmap = CompoundMap((priortable, std2017_dt), reduce=True)
     restrmap = RestrictedMap(
@@ -67,7 +95,6 @@ def prepare_result_data(git_hash):
         fixed_params_idcs=np.where(~is_adj)[0]
     )
     restrmap_prop = tf.function(restrmap.propagate)
-
 
     # propagate the mcmc estimates
     prop_chain = np.zeros((chain.shape[0], len(std2017_dt)), dtype=np.float64)
@@ -146,7 +173,9 @@ def prepare_result_data(git_hash):
     pred_dt['MAXLIKE'] = eval_maxlike2
 
     return {
+        'priortable': priortable,
         'pred_dt': pred_dt,
         'exptable': exptable2,
         'std2017_dt': std2017_dt,
+        'pred_sacs_dt': pred_sacs_dt,
     }
