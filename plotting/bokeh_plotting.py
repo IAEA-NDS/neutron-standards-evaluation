@@ -28,18 +28,29 @@ exptable = dfs['exptable']
 std2017 = dfs['std2017_dt']
 
 
-pred_list = [
-    load_evaluation('b3876f1', 'decreased TPC weight', 'green', 'dotdash'),
-    load_evaluation('4944a70', 'increased TPC weight', 'blue', 'dotdash'),
-    load_evaluation('89dc6bf', 'drop TPC exp (6001)', 'orange', 'dashed'),
-    load_evaluation('0f2311f', 'recommend (no shape USU)', 'red', 'dashed', ),
-    load_evaluation('649a9e8', 'recommend', 'red', 'solid'),
-    load_evaluation('ea40e40', 'latest eval', 'black', 'solid'),
-]
+pred_list = []
+cols = []
+# pred_list.append(load_evaluation('01a02a0', '8007 removed', 'green', 'dotdash'))
+# pred_list.append(load_evaluation('f42e55d', '1013 to shape', 'blue', 'dotdash'))
+pred_list.append(load_evaluation('1e8ce5e', 'recommend_new MCMC', 'orange', 'dashed'))
+cols.append("PRED")
+pred_list.append(load_evaluation('1e8ce5e', 'recommend_new OPT', 'green', 'dashed'))
+cols.append("MAXLIKE")
+pred_list.append(load_evaluation('649a9e8', 'recommend_base OPT', 'red', 'solid'))
+cols.append("MAXLIKE")
+pred_list.append(load_evaluation('649a9e8', 'recommend_base MCMC', 'blue', 'dotdash'))
+cols.append("PRED")
+pred_list.append(load_evaluation('ea40e40', 'latest eval', 'black', 'solid'))
+cols.append("PRED")
+pred_list.append(load_evaluation('89dc6bf', 'drop TPC exp (6001) MCMC', 'cyan', 'dashed'))
+cols.append("PRED")
+pred_list.append(load_evaluation('89dc6bf', 'drop TPC exp (6001) OPT', 'brown', 'dotdash'))
+cols.append("MAXLIKE")
+
 
 
 # TODO: adhoc addition of Pu9(n,f) cross section
-# needs to be done in a cleaner way in the future 
+# needs to be done in a cleaner way in the future
 from endf_parserpy import EndfParserCpp
 
 parser = EndfParserCpp()
@@ -57,14 +68,22 @@ pred_list.append(
         'git_hash': None,
         'pred_dt': pu9_nf_dt,
         'label': 'b81',
-        'color': 'black', 
+        'color': 'black',
         'style': 'dashed',
     }
 )
 
+cols.append("PRED")
+
+# interpolate STD2017 to energies of experiments and predictions
+dt_list = [v['pred_dt'] for v in pred_list]
+
+# add the experimental data
+dt_list.append(exptable)
+cols.append('DATA')
 
 ##################################################
-#            PLOTTING    
+#            PLOTTING
 ##################################################
 
 
