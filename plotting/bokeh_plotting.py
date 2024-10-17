@@ -191,7 +191,7 @@ for curreac in pred_list[0]['pred_dt'].REAC.unique():
         continue
     subfigures = []
     # first with RENORM_ML data
-    curfigure = figure(title=f'{curreac}', width=1000, height=800, toolbar_location='above', name=curreac)
+    curfigure = figure(title=f'{curreac}', width=1500, height=800, toolbar_location='above', name=curreac)
     Emin, Emax, is_empty = plot_expdata(curfigure, curreac, exptable, datacol='RATIO')
     if not is_empty:
         for pred in pred_list:
