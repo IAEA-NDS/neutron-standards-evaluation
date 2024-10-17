@@ -61,6 +61,8 @@ exp_remove_mask |= (exptable.NODE == 'exp_524') & (exptable.ENERGY > 27)  # A.D.
 exp_remove_mask |= (exptable.NODE == 'exp_8029')
 # remove Maslov's patch
 exp_remove_mask |= (exptable.NODE == 'exp_1003')
+# remove NIFFTE TPC above 7
+exp_remove_mask |= (exptable.NODE == "exp_6001") & (exptable.ENERGY >= 7)
 
 exp_keep_idcs = np.where(~exp_remove_mask)[0]
 exptable = exptable.loc[exp_keep_idcs].reset_index(drop=True)
