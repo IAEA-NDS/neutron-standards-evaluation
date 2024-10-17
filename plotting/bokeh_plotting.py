@@ -82,6 +82,38 @@ dt_list = [v['pred_dt'] for v in pred_list]
 dt_list.append(exptable)
 cols.append('DATA')
 
+
+for col, dt in zip(cols, dt_list):
+    grouped = dt.groupby('REAC')
+    for reac, curdt in grouped:
+        is_mt1 = reac.startswith('MT:1-')
+        is_mt3 = reac.startswith('MT:3-')
+        if not is_mt1 and not is_mt3:
+            continue
+        if is_mt1:
+            if not np.isin(reac, std2017.REAC):
+                continue
+            red_std2017 = std2017[std2017.REAC == reac]
+            interp_vals = np.interp(curdt.ENERGY, red_std2017.ENERGY, red_std2017.DATA, left=np.nan, right=np.nan)
+            dt.loc[curdt.index, 'STD2017'] = interp_vals
+            dt.loc[curdt.index, 'RATIO'] = dt.loc[curdt.index, col] / dt.loc[curdt.index, 'STD2017']
+        if is_mt3:
+            reac_comps = reac.split('-')
+            r1 = reac_comps[1].split(':')[1]
+            r2 = reac_comps[2].split(':')[1]
+            reac1 = f'MT:1-R1:{r1}'
+            reac2 = f'MT:1-R1:{r2}'
+            if not np.isin(reac1, std2017.REAC) or not np.isin(reac2, std2017.REAC):
+                continue
+            red_std2017_upper = std2017[std2017.REAC == reac1]
+            red_std2017_lower = std2017[std2017.REAC == reac2]
+            interp_vals_upper = np.interp(curdt.ENERGY, red_std2017_upper.ENERGY, red_std2017_upper.DATA, left=np.nan, right=np.nan)
+            interp_vals_lower = np.interp(curdt.ENERGY, red_std2017_lower.ENERGY, red_std2017_lower.DATA, left=np.nan, right=np.nan)
+            interp_vals = interp_vals_upper / interp_vals_lower
+            dt.loc[curdt.index, 'STD2017'] = interp_vals
+            dt.loc[curdt.index, 'RATIO'] = dt.loc[curdt.index, col] / dt.loc[curdt.index, 'STD2017']
+
+
 ##################################################
 #            PLOTTING
 ##################################################
@@ -92,6 +124,11 @@ cols.append('DATA')
 def plot_expdata(figure, reac, expdata, datacol=None, include_usu=False):
     expdata = expdata[expdata.REAC == reac].copy()
     expdata = expdata[expdata.ENERGY > 2.58e-8].copy()
+    is_okay = (~expdata[datacol].isna()) & (expdata[datacol] > 0.5) & (expdata[datacol] < 1.5)
+    expdata = expdata[is_okay].copy()
+    if len(expdata) == 0:
+        return np.nan, np.nan, True
+
     grouped = expdata.groupby('NODE')
     numgroups = len(grouped)
     colpal = Category20_20[:numgroups]
@@ -101,8 +138,8 @@ def plot_expdata(figure, reac, expdata, datacol=None, include_usu=False):
     for node, curdt in grouped:
         curdt = curdt.copy()
         curlabel = node
-        if 'ORIG_REAC' in curdt.columns: 
-            orig_reac = curdt['ORIG_REAC'].iloc[0] 
+        if 'ORIG_REAC' in curdt.columns:
+            orig_reac = curdt['ORIG_REAC'].iloc[0]
             m = re.match(r'MT:(\d+)-', orig_reac)
             is_shape = int(m.group(1)) in SHAPE_MT_IDS
             qstr = 's' if is_shape else 'a'
@@ -115,6 +152,7 @@ def plot_expdata(figure, reac, expdata, datacol=None, include_usu=False):
         err_xs = []
         err_ys = []
         uncvals = curdt['UNC_USU'] if include_usu else curdt['UNC']
+        uncvals /= curdt['STD2017']  # uncertainties relative to std2017
         for x, y, yerr in zip(curdt['ENERGY'], curdt[datacol], uncvals):
             err_xs.append((x, x))
             err_ys.append((y-yerr, y+yerr))
@@ -125,7 +163,7 @@ def plot_expdata(figure, reac, expdata, datacol=None, include_usu=False):
         #              yerr=curdt.UNC, fmt='o', label=curlabel)
     Emin = expdata.ENERGY.min()
     Emax = expdata.ENERGY.max()
-    return Emin, Emax
+    return Emin, Emax, False
 
 
 # helper function to plot evaluations
@@ -133,6 +171,8 @@ def plot_expdata(figure, reac, expdata, datacol=None, include_usu=False):
 def plot_evaluation(figure, reac, pred_dt, datacol, Emin, Emax, label, color, style):
     cdt = pred_dt.query(f'REAC == "{curreac}" & ENERGY >= {Emin} & ENERGY <= {Emax}')
     cdt = cdt.copy()
+    cdt = cdt[(cdt['RATIO'] > 0.5) & (cdt['RATIO'] < 1.5)].copy()
+
     cursource = ColumnDataSource(data=cdt)
     figure.line(
         'ENERGY', datacol, source=cursource,
@@ -142,6 +182,7 @@ def plot_evaluation(figure, reac, pred_dt, datacol, Emin, Emax, label, color, st
 
 figures = {}
 allreacs = {}
+is_all_empty = True
 for curreac in pred_list[0]['pred_dt'].REAC.unique():
     m = re.findall(r'R\d+:(\d+)', curreac)
     if any(int(x) > 10 for x in m):
@@ -151,16 +192,17 @@ for curreac in pred_list[0]['pred_dt'].REAC.unique():
     subfigures = []
     # first with RENORM_ML data
     curfigure = figure(title=f'{curreac}', width=1000, height=800, toolbar_location='above', name=curreac)
-    Emin, Emax = plot_expdata(curfigure, curreac, exptable, datacol='DATA')
-    for pred in pred_list:
-        plot_evaluation(
-            curfigure, curreac, pred['pred_dt'], 'PRED',
-            Emin*0.9, Emax*1.1, label=pred['label'],
-            color=pred['color'], style=pred['style'],
-        )
-    subfigures.append(curfigure)
-    # save everything
-    figures[curreac] = subfigures
+    Emin, Emax, is_empty = plot_expdata(curfigure, curreac, exptable, datacol='RATIO')
+    if not is_empty:
+        for pred in pred_list:
+            plot_evaluation(
+                curfigure, curreac, pred['pred_dt'], 'RATIO',
+                Emin*0.9, Emax*1.1, label=pred['label'],
+                color=pred['color'], style=pred['style'],
+            )
+        subfigures.append(curfigure)
+        # save everything
+        figures[curreac] = subfigures
 
 
 # auxiliary function
@@ -180,8 +222,9 @@ panel_groups = {}
 for k, p in figures.items():
     groupname = get_groupname(k)
     curgroup = panel_groups.setdefault(groupname, [])
-    currow = row(p[0])  # if several panels: row(p[0], p[1], ...)
-    curgroup.append(TabPanel(child=currow, title=k))
+    if len(p) > 0:
+        currow = row(p[0])  # if several panels: row(p[0], p[1], ...)
+        curgroup.append(TabPanel(child=currow, title=k))
 
 super_panel_groups = []
 for k, p in panel_groups.items():
