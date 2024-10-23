@@ -48,6 +48,13 @@ remove_dummy_datasets(db['datablock_list'])
 priortable = create_prior_table(db['prior_list'])
 priorcov = create_prior_covmat(db['prior_list'])
 
+# remove energies above 35 MeV
+remove_mask = np.array(priortable.REAC.str.match("MT:([0-9]|10)(-R.:([0-9]|10))+"))
+remove_mask &= priortable.ENERGY > 35 
+priortable = priortable.loc[~remove_mask].reset_index()
+priorcov = priorcov[np.ix_(~remove_mask, ~remove_mask)]
+
+
 # prepare experimental quantities
 exptable = create_experiment_table(db['datablock_list'])
 expcov = create_experimental_covmat(db['datablock_list'])
@@ -65,7 +72,7 @@ exp_remove_mask |= (exptable.NODE == 'exp_1003')
 # remove Scherbakov PU9/U5 n,f data
 exp_remove_mask |= (exptable.NODE == 'exp_1012')
 # remove everything except datapoints at 29 and 30 MeV
-exp_remove_mask |= (exptable.ENERGY < 29) | (exptable.ENERGY > 30)
+exp_remove_mask |= (exptable.ENERGY > 35)
 
 exp_keep_idcs = np.where(~exp_remove_mask)[0]
 exptable = exptable.loc[exp_keep_idcs].reset_index(drop=True)
