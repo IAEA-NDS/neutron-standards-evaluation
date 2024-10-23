@@ -223,7 +223,7 @@ prior = DistributionForParameterSubset(
 #     approximate_hessian=True, relative=True
 # )
 likelihood = MultivariateNormalLikelihood(
-    len(adj_idcs), propfun, jacfun, expvals, expcov_chol, approximate_hessian=True, relative=True
+    len(adj_idcs), propfun, jacfun, expvals, expcov_chol, approximate_hessian=True, relative=False
 )
 
 # combine prior and likelihood into posterior
