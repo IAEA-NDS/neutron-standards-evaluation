@@ -35,10 +35,10 @@ def load_evaluation(git_hash, label, color, style):
 @mem.cache
 def prepare_result_data(git_hash):
     curcalc = f'../output/{git_hash}/output'
-    priortable, red_usu_df, is_adj, exptable, restrimap, num_covpars, like_cov_fun = \
+    priortable, is_adj, exptable, restrimap = \
         load_objects(f'{curcalc}/01_model_preparation_output.pkl',
-                     'priortable', 'red_usu_df', 'is_adj',
-                     'exptable', 'restrimap', 'num_covpars', 'like_cov_fun')
+                     'priortable', 'is_adj',
+                     'exptable', 'restrimap')
     chain, = load_objects(f'{curcalc}/03_mcmc_sampling_output.pkl', 'chain')
     optres, = load_objects(f'{curcalc}/02_parameter_optimization_output.pkl', 'optres')
     eval_maxlike_raw = optres.position.numpy()
@@ -51,9 +51,9 @@ def prepare_result_data(git_hash):
 
     # add column where uncertainties are inflated by USU components
     # as they are used/determined in the evaluation
-    inflated_cov = like_cov_fun(np.mean(np.abs(chain[:, -num_covpars:]), axis=0))
-    inflated_uncs = np.sqrt(inflated_cov.diag_part())
-    exptable['UNC_USU'] = inflated_uncs * exptable['DATA']
+    # inflated_cov = like_cov_fun(np.mean(np.abs(chain[:, -num_covpars:]), axis=0))
+    # inflated_uncs = np.sqrt(inflated_cov.diag_part())
+    # exptable['UNC_USU'] = inflated_uncs * exptable['DATA']
 
     red_priortable['MAXLIKE'] = eval_maxlike_raw[:len(red_priortable)]
     postvals = red_priortable['POST'].to_numpy(copy=True)
