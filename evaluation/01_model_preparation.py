@@ -31,7 +31,8 @@ from gmapy.mappings.tf.energy_dependent_absolute_usu_map_tf import (
 )
 from gmapy.tf_uq.custom_distributions import (
     MultivariateNormal,
-    MultivariateNormalLikelihoodWithCovParams,
+    # MultivariateNormalLikelihoodWithCovParams,
+    MultivariateNormalLikelihood,
     DistributionForParameterSubset,
     UnnormalizedDistributionProduct
 )
@@ -209,14 +210,20 @@ is_adj_constr_idcs = np.where(is_adj_constr)[0]
 priorcov_chol = tf.linalg.LinearOperatorDiag(np.sqrt(priorcov.diagonal()[is_adj_constr]))
 prior_red = MultivariateNormal(priorvals[is_adj_constr], priorcov_chol)
 prior_red.log_prob_hessian(priorvals[is_adj_constr])
+# prior = DistributionForParameterSubset(
+#     prior_red, len(adj_idcs) + num_covpars, is_adj_constr_idcs
+# )
 prior = DistributionForParameterSubset(
-    prior_red, len(adj_idcs) + num_covpars, is_adj_constr_idcs
+    prior_red, len(adj_idcs), is_adj_constr_idcs
 )
 
 # generate the likelihood
-likelihood = MultivariateNormalLikelihoodWithCovParams(
-    len(adj_idcs), num_covpars, propfun, jacfun, expvals, like_cov_fun,
-    approximate_hessian=True, relative=True
+# likelihood = MultivariateNormalLikelihoodWithCovParams(
+#     len(adj_idcs), num_covpars, propfun, jacfun, expvals, like_cov_fun,
+#     approximate_hessian=True, relative=True
+# )
+likelihood = MultivariateNormalLikelihood(
+    len(adj_idcs), propfun, jacfun, expvals, expcov_chol, approximate_hessian=True, relative=True
 )
 
 # combine prior and likelihood into posterior
