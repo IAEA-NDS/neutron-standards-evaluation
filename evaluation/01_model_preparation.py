@@ -64,6 +64,8 @@ exp_remove_mask |= (exptable.NODE == 'exp_8029')
 exp_remove_mask |= (exptable.NODE == 'exp_1003')
 # remove Scherbakov PU9/U5 n,f data
 exp_remove_mask |= (exptable.NODE == 'exp_1012')
+# remove everything except datapoints at 29 and 30 MeV
+exp_remove_mask |= (exptable.ENERGY < 29) | (exptable.ENERGY > 30)
 
 exp_keep_idcs = np.where(~exp_remove_mask)[0]
 exptable = exptable.loc[exp_keep_idcs].reset_index(drop=True)
@@ -134,94 +136,17 @@ expcov_linop = tf.linalg.LinearOperatorComposition(
     is_self_adjoint=True, is_positive_definite=True
 )
 
-# relevant USU error contributions
-# abs U5(n,f) at 1, 5, 15 MeV (clear USU around 2 MeV region)
-# abs PU9(n,f) at 1, 5 MeV (likely no USU but to be conservative)
-# shape U5(n,f) at 0, 1, 5, 15 MeV (likely USU in the low energy range (not thermal), at about 2 MeV nd at 15 MeV)
-# shape PU9(n,f) at 1, 5 MeV (likely USU at about 2 MeV)
-# MT:3-R1:10-R2:8 at 0, 1, 5, 15, 30, 100, 200
-# MT:3-R1:9-R2:8 at 0, 1, 5, 15, 30, 60
-# MT:4-R1:10-R2:8 at 1, 5 MeV (likely USU in 1-5 MeV range)
-# MT:4-R1:9-R2:8 at 0, 1, 5, 15 (likely USU at
-
-usu_dfs = []
-usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:1-R1:8',), (5e-3, 1e-1, 1., 5., 15., 30.), (1e-2,)*6))
-usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:1-R1:9',), (5e-3, 1e-1, 1., 5., 15., 30.), (1e-2,)*6))
-usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:2-R1:8',), (1e-3, 1e-2, 1e-1, 1., 5., 15., 30.), (1e-2,)*7))
-usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:2-R1:9',), (1e-3, 1e-2, 1e-1, 1., 5., 15., 30.), (1e-2,)*7))
-usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:3-R1:10-R2:8',), (0.1, 1., 5., 15., 30., 100., 200.), (1e-2,)*7))
-usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:3-R1:9-R2:8',), (1e-3, 1e-2, 0.1, 1., 5., 15., 30., 60.), (1e-2,)*8))
-usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:4-R1:10-R2:8',), (0.1, 1., 5., 15., 30.), (1e-2,)*5))
-usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:4-R1:9-R2:8',), (1e-3, 1e-2, 1e-1, 1., 5., 15., 30.), (1e-2,)*7))
-usu_df = pd.concat(usu_dfs, ignore_index=True)
-
-# variation-01: remove usu treatment for specific datasets (after visual inspection of results)
-usu_df = usu_df[~(usu_df.NODE == 'endep_abs_usu_521')]
-usu_df = usu_df[~(usu_df.NODE == 'endep_abs_usu_1003')]
-usu_df = usu_df[~(usu_df.NODE == 'endep_abs_usu_1028')]
-# remove USU of NIFFTE TPC PU9/U5 fission measurement, believed to very accurate
-usu_df = usu_df[~(usu_df.NODE == 'endep_abs_usu_6001')]
-usu_df = usu_df.reset_index(drop=True)
-# variation-01: end
-
-usu_map = EnergyDependentAbsoluteUSUMap((usu_df, exptable), reduce=True)
-usu_jac = tf.sparse.to_dense(usu_map.jacobian(usu_df.PRIOR.to_numpy()))
-
-
-
-def create_like_cov_fun(usu_df, expcov_linop, Smat):
-
-    def map_uncertainties(u):
-        ids = np.zeros((len(usu_df),), dtype=np.int32)
-        for index, row in red_usu_df.iterrows():
-            reac = row.REAC
-            energy = row.ENERGY
-            cur_idcs = usu_df.index[
-                (usu_df.REAC == reac) & (usu_df.ENERGY == energy)
-            ].to_numpy()
-            ids[cur_idcs] = index
-        # scatter the uncertainties to the appropriate places
-        tf_ids = tf.constant(ids, dtype=tf.int32)
-        uncs = tf.nn.embedding_lookup(u, tf_ids)
-        return uncs
-
-    def like_cov_fun(u):
-        uncs = map_uncertainties(u)
-        # covop = tf.linalg.LinearOperatorLowRankUpdate(
-        covop = tf.linalg.LinearOperatorLowRankUpdate(
-            expcov_linop, Smat, tf.square(uncs) + 1e-7,
-            is_self_adjoint=True, is_positive_definite=True,
-            is_diag_update_positive=True
-        )
-        return covop
-    red_usu_df = usu_df[['REAC', 'ENERGY']].drop_duplicates()
-    red_usu_df.sort_values(
-        ['REAC', 'ENERGY'], ascending=True, ignore_index=True, inplace=True
-    )
-    return like_cov_fun, red_usu_df
-
-
-like_cov_fun, red_usu_df = create_like_cov_fun(usu_df, expcov_linop, usu_jac)
-num_covpars = len(red_usu_df)
-
 # generate the prior distribution
 is_adj_constr = is_adj & np.isfinite(priorcov.diagonal())
 is_adj_constr_idcs = np.where(is_adj_constr)[0]
 priorcov_chol = tf.linalg.LinearOperatorDiag(np.sqrt(priorcov.diagonal()[is_adj_constr]))
 prior_red = MultivariateNormal(priorvals[is_adj_constr], priorcov_chol)
 prior_red.log_prob_hessian(priorvals[is_adj_constr])
-# prior = DistributionForParameterSubset(
-#     prior_red, len(adj_idcs) + num_covpars, is_adj_constr_idcs
-# )
+
 prior = DistributionForParameterSubset(
     prior_red, len(adj_idcs), is_adj_constr_idcs
 )
 
-# generate the likelihood
-# likelihood = MultivariateNormalLikelihoodWithCovParams(
-#     len(adj_idcs), num_covpars, propfun, jacfun, expvals, like_cov_fun,
-#     approximate_hessian=True, relative=True
-# )
 likelihood = MultivariateNormalLikelihood(
     len(adj_idcs), propfun, jacfun, expvals, expcov_chol, approximate_hessian=True, relative=True
 )
@@ -229,6 +154,8 @@ likelihood = MultivariateNormalLikelihood(
 # combine prior and likelihood into posterior
 post = UnnormalizedDistributionProduct([prior, likelihood])
 
+usu_df = []  # quick and dirty
+
 save_objects('output/01_model_preparation_output.pkl', locals(),
-             'post', 'likelihood', 'priorvals', 'is_adj', 'usu_df', 'red_usu_df',
-             'num_covpars', 'priortable', 'exptable', 'expcov', 'like_cov_fun', 'compmap', 'restrimap')
+             'post', 'likelihood', 'priorvals', 'is_adj',
+             'priortable', 'exptable', 'expcov', 'compmap', 'restrimap')
