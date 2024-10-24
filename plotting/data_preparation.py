@@ -49,6 +49,9 @@ def prepare_result_data(git_hash):
     red_priortable['POST'] = np.mean(chain[:, :len(red_priortable)], axis=0)
     red_priortable['POSTUNC'] = np.std(chain[:, :len(red_priortable)], axis=0)
 
+    priortable.loc[is_adj, 'POST'] = np.array(red_priortable['POST'])
+    priortable.loc[is_adj, 'POSTUNC'] = np.array(red_priortable['POSTUNC'])
+
     # add column where uncertainties are inflated by USU components
     # as they are used/determined in the evaluation
     # inflated_cov = like_cov_fun(np.mean(np.abs(chain[:, -num_covpars:]), axis=0))
