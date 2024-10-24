@@ -104,9 +104,16 @@ expcov_list, idcs_tuples = create_datablock_covmat_list(db['datablock_list'], re
 for i in range(len(expcov_list)):
     cur_idcs = np.arange(idcs_tuples[i][0], idcs_tuples[i][1]+1)
     cur_idcs = cur_idcs[np.isin(cur_idcs, exp_keep_idcs)] - idcs_tuples[i][0]
-    expcov_list[i] = csr_matrix(expcov_list[i].toarray()[np.ix_(cur_idcs, cur_idcs)])
+    curcov = expcov_list[i].toarray()
+    # cov manipulation
+    if i == 182:  # datablock index of Lisowski
+        assert idcs_tuples[i][0] == 5618
+        curcov[:] = 0.0
+        np.fill_diagonal(curcov, 0.0001)
+    expcov_list[i] = csr_matrix(curcov[np.ix_(cur_idcs, cur_idcs)])
 
 expcov_list = [x for x in expcov_list if x.shape != (0, 0)]
+
 
 # variation-01 end
 expchol_list = [tf.linalg.cholesky(x.toarray()) for x in expcov_list]
