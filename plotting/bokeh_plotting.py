@@ -20,10 +20,12 @@ from gmapy.data_management.quantity_types import SHAPE_MT_IDS
 from data_preparation import (
     prepare_result_data,
     load_evaluation,
+    get_human_readable_reaction_string,
 )
 
 
 dfs = prepare_result_data('ea40e40')
+ref_priortable = dfs['priortable'].copy()
 exptable = dfs['exptable']
 std2017 = dfs['std2017_dt']
 
@@ -191,7 +193,8 @@ for curreac in pred_list[0]['pred_dt'].REAC.unique():
         continue
     subfigures = []
     # first with RENORM_ML data
-    curfigure = figure(title=f'{curreac}', width=1500, height=800, toolbar_location='above', name=curreac)
+    curtitle = get_human_readable_reaction_string(curreac, ref_priortable)
+    curfigure = figure(title=curtitle, width=1500, height=800, toolbar_location='above', name=curreac)
     Emin, Emax, is_empty = plot_expdata(curfigure, curreac, exptable, datacol='RATIO')
     if not is_empty:
         for pred in pred_list:
