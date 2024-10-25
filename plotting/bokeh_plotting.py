@@ -22,6 +22,7 @@ from data_preparation import (
     load_evaluation,
     get_human_readable_reaction_string,
     parse_reaction_string,
+    load_endf_evaluation
 )
 
 
@@ -51,31 +52,18 @@ cols.append("MAXLIKE")
 # cols.append("MAXLIKE")
 
 
-
-# TODO: adhoc addition of Pu9(n,f) cross section
-# needs to be done in a cleaner way in the future
-from endf_parserpy import EndfParserCpp
-
-parser = EndfParserCpp()
-
 endfb81_path = '/home/gschnabel/bigdata/nuclibs/endfb8.1/neutrons-version.VIII.1'
-endfb81_pu9_file = 'n-094_Pu_239.endf'
-pu9 = parser.parsefile(os.path.join(endfb81_path, endfb81_pu9_file))
-
-pu9_nf = pu9[3][18]['xstable']
-pu9_nf_dt = pd.DataFrame({'REAC': 'MT:1-R1:9', 'ENERGY': pu9_nf['E'], 'PRED': pu9_nf['xs']})
-pu9_nf_dt['ENERGY'] = pu9_nf_dt['ENERGY'] / 1e6
-
+endfb81_pu9_file = os.path.join(endfb81_path, 'n-094_Pu_239.endf')
+pu9_nf_dt = load_endf_evaluation(endfb81_pu9_file, 18, 9)
 pred_list.append(
     {
         'git_hash': None,
         'pred_dt': pu9_nf_dt,
         'label': 'b81',
-        'color': 'black',
-        'style': 'dashed',
+        'color': 'blue',
+        'style': 'solid',
     }
 )
-
 cols.append("PRED")
 
 # interpolate STD2017 to energies of experiments and predictions
