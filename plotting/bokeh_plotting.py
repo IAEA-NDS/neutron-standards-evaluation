@@ -241,24 +241,23 @@ for curreac in pred_list[0]['pred_dt'].REAC.unique():
 
 
 sacs_tables = []
+for cur_pred_info in pred_list:
+    if not 'pred_sacs_dt' in cur_pred_info:
+        continue
+    cur_sacs_dt = cur_pred_info['pred_sacs_dt'][["REAC", "OPT", "MCMC"]].copy()
+    cur_sacs_dt['REAC'] = cur_sacs_dt['REAC'].apply(lambda x: get_human_readable_reaction_string(x, ref_priortable)) 
 
-cur_pred_info = pred_list[0]
+    cursource = ColumnDataSource(cur_sacs_dt)
+    curcolumns = [
+        TableColumn(field="REAC", title="Reaction"),
+        TableColumn(field="OPT", title="Optim", formatter=NumberFormatter(format='0.0000')),
+        TableColumn(field="MCMC", title="MCMC", formatter=NumberFormatter(format='0.0000')),
+    ]
+    sacs_datatable = DataTable(source=cursource, columns=curcolumns, width=700, height=200)
+    sacs_datatable_title = Div(text=f"<h2>{cur_pred_info['label']} (git: {cur_pred_info['git_hash']})</h2>")
 
-cur_sacs_dt = cur_pred_info['pred_sacs_dt'][["REAC", "OPT", "MCMC"]].copy()
-cur_sacs_dt['REAC'] = cur_sacs_dt['REAC'].apply(lambda x: get_human_readable_reaction_string(x, ref_priortable)) 
-
-cursource = ColumnDataSource(cur_sacs_dt)
-curcolumns = [
-    TableColumn(field="REAC", title="Reaction"),
-    TableColumn(field="OPT", title="Optim", formatter=NumberFormatter(format='0.0000')),
-    TableColumn(field="MCMC", title="MCMC", formatter=NumberFormatter(format='0.0000')),
-]
-sacs_datatable = DataTable(source=cursource, columns=curcolumns, width=700, height=700)
-sacs_datatable_title = Div(text=f"<h2>{cur_pred_info['label']}</h2>")
-
-sacs_tables.append(sacs_datatable_title)
-sacs_tables.append(sacs_datatable)
-
+    sacs_tables.append(sacs_datatable_title)
+    sacs_tables.append(sacs_datatable)
 
 # auxiliary function
 
