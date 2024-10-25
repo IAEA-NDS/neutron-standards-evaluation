@@ -52,7 +52,7 @@ def get_human_readable_reaction_string(reacstr, priortable):
         6: lambda x: f'{reacstr_map[x[0]]} SACS',
         7: lambda x: f'{reacstr_map[x[0]]} / [ ' \
                        + ' + '.join(reacstr_map[v] for v in x[1:]) + ' ]',
-        10: lambda x: f'{reacstr_map[x[0]]}  / {reacstr_map[x[1]]} SACS RATIO'
+        10: lambda x: f'{reacstr_map[x[0]]} / {reacstr_map[x[1]]} SACS RATIO'
     }
     mt_map.update({
         2: lambda x: mt_map[1](x) + ' shape',
