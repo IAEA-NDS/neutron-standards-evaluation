@@ -2,7 +2,17 @@ import re
 import os
 from bokeh.palettes import Category20_20
 from bokeh.plotting import figure, show, save, curdoc
-from bokeh.models import ColumnDataSource, HoverTool, Row, Select, CustomJS, Dropdown
+from bokeh.models import (
+    ColumnDataSource,
+    HoverTool,
+    Row,
+    Select,
+    CustomJS,
+    Dropdown,
+    NumberFormatter,
+    Div,
+)
+from bokeh.models.widgets import TableColumn, DataTable
 from bokeh.layouts import column, row
 from bokeh.models import TabPanel, Tabs
 from bokeh.layouts import gridplot
@@ -224,6 +234,29 @@ for curreac in pred_list[0]['pred_dt'].REAC.unique():
         figures[curreac] = subfigures
 
 
+# create a panel for the sacs data
+
+
+sacs_tables = []
+
+cur_pred_info = pred_list[0]
+
+cur_sacs_dt = cur_pred_info['pred_sacs_dt'][["REAC", "OPT", "MCMC"]].copy()
+cur_sacs_dt['REAC'] = cur_sacs_dt['REAC'].apply(lambda x: get_human_readable_reaction_string(x, ref_priortable)) 
+
+cursource = ColumnDataSource(cur_sacs_dt)
+curcolumns = [
+    TableColumn(field="REAC", title="Reaction"),
+    TableColumn(field="OPT", title="Optim", formatter=NumberFormatter(format='0.0000')),
+    TableColumn(field="MCMC", title="MCMC", formatter=NumberFormatter(format='0.0000')),
+]
+sacs_datatable = DataTable(source=cursource, columns=curcolumns, width=700, height=700)
+sacs_datatable_title = Div(text=f"<h2>{cur_pred_info['label']}</h2>")
+
+sacs_tables.append(sacs_datatable_title)
+sacs_tables.append(sacs_datatable)
+
+
 # auxiliary function
 
 def get_groupname(key):
@@ -250,7 +283,16 @@ for k, p in panel_groups.items():
     curtabs = TabPanel(child=Tabs(tabs=p), title=k)
     super_panel_groups.append(curtabs)
 
+# add the SACS data Panel
+
+curtab = TabPanel(child=column(sacs_tables), title="SACS")
+super_panel_groups.append(curtab)
+
+
+# create the layout
+
 layout = Tabs(tabs=super_panel_groups)
+
 
 # save to ile
 
