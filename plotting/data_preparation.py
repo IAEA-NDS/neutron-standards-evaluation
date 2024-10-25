@@ -19,6 +19,38 @@ from gmapy.data_management.quantity_types import SHAPE_MT_IDS
 mem = joblib.Memory('/tmp')
 
 
+def parse_reaction_string(reacstr):
+    s = reacstr.split('-')
+    t = tuple(int(v.split(':')[1]) for v in s)
+    return t
+
+
+def get_human_readable_reaction_string(reacstr, priortable):
+    mt, *reacnums = parse_reaction_string(reacstr) 
+    p = priortable.loc[
+        priortable.NODE.str.startswith('xsid_'), ['REAC', 'DESCR']
+    ].drop_duplicates()
+    reac_nums = p.REAC.str.extract(r'R1:(\d+)').apply(lambda x: tuple(int(v) for v in x))
+    p['REACNUM'] = reac_nums
+    reacstr_map = {k: v for k, v in zip(p.REACNUM, p.DESCR)}
+    mt_map = {
+        1: lambda x: reacstr_map[x[0]],
+        3: lambda x: f'{reacstr_map[x[0]]} / {reacstr_map[x[1]]}',
+        5: lambda x: ' + '.join(reacstr_map[v] for v in x),
+        6: lambda x: f'{reacstr_map[x[0]]} SACS',
+        7: lambda x: f'{reacstr_map[x[0]]} / [ ' \
+                       + ' + '.join(reacstr_map[v] for v in x[1:]) + ' ]',
+        10: lambda x: f'{reacstr_map[x[0]]}  / {reacstr_map[x[1]]} SACS RATIO'
+    }
+    mt_map.update({
+        2: lambda x: mt_map[1](x) + ' shape',
+        4: lambda x: mt_map[3](x) + ' shape',
+        8: lambda x: mt_map[5](x) + ' shape',
+        9: lambda x: mt_map[7](x) + ' shape',
+    })
+    return mt_map[mt](reacnums)
+
+
 def load_evaluation(git_hash, label, color, style):
     dfs = prepare_result_data(git_hash)
     return {
