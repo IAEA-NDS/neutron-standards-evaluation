@@ -35,6 +35,9 @@ from data_preparation import (
     load_endf_evaluation
 )
 
+# only used for renormalization
+dfs = prepare_result_data('1e8ce5e')
+exptable = dfs['exptable']
 
 # reference cross section
 dfs = prepare_result_data('ea40e40')
@@ -46,15 +49,15 @@ pred_list = []
 cols = []
 # pred_list.append(load_evaluation('01a02a0', '8007 removed', 'green', 'dotdash'))
 # pred_list.append(load_evaluation('f42e55d', '1013 to shape', 'blue', 'dotdash'))
-pred_list.append(load_evaluation('1e8ce5e', 'recommend_new MCMC', 'orange', 'dashed'))
-cols.append("PRED")
-pred_list.append(load_evaluation('1e8ce5e', 'recommend_new OPT', 'green', 'dashed'))
+# pred_list.append(load_evaluation('1e8ce5e', 'recommend_new MCMC', 'orange', 'dashed'))
+# cols.append("PRED")
+pred_list.append(load_evaluation('1e8ce5e', 'latest evaluation', 'green', 'solid'))
 cols.append("MAXLIKE")
-pred_list.append(load_evaluation('afd2267', '29-30 MeV MCMC', 'brown', 'dotdash'))
-cols.append("PRED")
-pred_list.append(load_evaluation('afd2267', '29-30 MeV OPT', 'blue', 'dotdash'))
-cols.append("MAXLIKE")
-# pred_list.append(load_evaluation('7eb0fac', 'no TPC<7 MeV', 'black', 'solid'))
+# pred_list.append(load_evaluation('ea40e40', 'liso_rel_low_unc', 'brown', 'dotdash'))
+# cols.append("PRED")
+# pred_list.append(load_evaluation('003a588', 'liso_abs_low_unc', 'blue', 'dotdash'))
+# cols.append("PRED")
+# pred_list.append(load_evaluation('55c975c', 'liso_abs', 'black', 'solid'))
 # cols.append("PRED")
 # pred_list.append(load_evaluation('fc8634c', 'no TPC>7 MeV', 'cyan', 'dashed'))
 # cols.append("PRED")
