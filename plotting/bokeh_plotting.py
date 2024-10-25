@@ -200,7 +200,7 @@ def plot_evaluation(figure, reac, pred_dt, datacol, Emin, Emax, label, color, st
     cursource = ColumnDataSource(data=cdt)
     figure.line(
         'ENERGY', datacol, source=cursource,
-        color=color, line_dash=style, legend_label=label)
+        color=color, line_dash=style, legend_label=label, line_width=2)
 
 # plot comparing absolute cross sections
 
