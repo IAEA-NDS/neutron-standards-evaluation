@@ -14,9 +14,21 @@ from data_utils import load_std2017_data
 from utils import renormalize_data, translate_to_absreacs
 from gmapy.mappings.priortools import attach_shape_prior
 from gmapy.data_management.quantity_types import SHAPE_MT_IDS
+from endf_parserpy import EndfParserCpp
 
 
 mem = joblib.Memory('/tmp')
+
+
+def load_endf_evaluation(file, mt, gmapy_reacnum):
+    parser = EndfParserCpp()
+    endf_dict = parser.parsefile(file)
+    mf3sec = endf_dict[3][mt]['xstable']
+    dt = pd.DataFrame({
+        'REAC': f'MT:1-R1:{gmapy_reacnum}',
+        'ENERGY': mf3sec['E'], 'PRED': mf3sec['xs']})
+    dt['ENERGY'] = dt['ENERGY'] / 1e6
+    return dt
 
 
 def parse_reaction_string(reacstr):
