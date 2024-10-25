@@ -21,12 +21,13 @@ from data_preparation import (
     prepare_result_data,
     load_evaluation,
     get_human_readable_reaction_string,
+    parse_reaction_string,
 )
 
 
+# reference cross section
 dfs = prepare_result_data('ea40e40')
 ref_priortable = dfs['priortable'].copy()
-exptable = dfs['exptable']
 std2017 = dfs['std2017_dt']
 
 
@@ -123,13 +124,19 @@ for col, dt in zip(cols, dt_list):
 
 # helper function to plot experimental data in current figure
 
-def plot_expdata(figure, reac, expdata, datacol=None, include_usu=False):
+
+def get_expdata_for_reaction(reac, expdata, datacol=None):
     expdata = expdata[expdata.REAC == reac].copy()
     expdata = expdata[expdata.ENERGY > 2.58e-8].copy()
     is_okay = (~expdata[datacol].isna()) & (expdata[datacol] > 0.5) & (expdata[datacol] < 1.5)
     expdata = expdata[is_okay].copy()
+    return expdata
+
+
+def plot_expdata(figure, reac, expdata, datacol=None, include_usu=False):
+    expdata = get_expdata_for_reaction(reac, expdata, datacol)
     if len(expdata) == 0:
-        return np.nan, np.nan, True
+        return
 
     grouped = expdata.groupby('NODE')
     numgroups = len(grouped)
@@ -150,7 +157,7 @@ def plot_expdata(figure, reac, expdata, datacol=None, include_usu=False):
         curdt['color'] = coldict[node]
         cursource = ColumnDataSource(data=curdt)
         figure.scatter('ENERGY', datacol, size=10, source=cursource, color='color',
-                      legend_label=curlabel)
+                       legend_label=curlabel, level='underlay')
         err_xs = []
         err_ys = []
         uncvals = curdt['UNC_USU'] if include_usu else curdt['UNC']
@@ -163,9 +170,6 @@ def plot_expdata(figure, reac, expdata, datacol=None, include_usu=False):
         # figure.add_tools(hover)
         # plt.errorbar(curdt.ENERGY, curdt.RENORM_DATA,
         #              yerr=curdt.UNC, fmt='o', label=curlabel)
-    Emin = expdata.ENERGY.min()
-    Emax = expdata.ENERGY.max()
-    return Emin, Emax, False
 
 
 # helper function to plot evaluations
@@ -174,6 +178,8 @@ def plot_evaluation(figure, reac, pred_dt, datacol, Emin, Emax, label, color, st
     cdt = pred_dt.query(f'REAC == "{curreac}" & ENERGY >= {Emin} & ENERGY <= {Emax}')
     cdt = cdt.copy()
     cdt = cdt[(cdt['RATIO'] > 0.5) & (cdt['RATIO'] < 1.5)].copy()
+    if len(cdt) == 0:
+        return
 
     cursource = ColumnDataSource(data=cdt)
     figure.line(
@@ -186,6 +192,7 @@ figures = {}
 allreacs = {}
 is_all_empty = True
 for curreac in pred_list[0]['pred_dt'].REAC.unique():
+    mtnum, *rnums = parse_reaction_string(curreac)
     m = re.findall(r'R\d+:(\d+)', curreac)
     if any(int(x) > 10 for x in m):
         continue
@@ -194,16 +201,22 @@ for curreac in pred_list[0]['pred_dt'].REAC.unique():
     subfigures = []
     # first with RENORM_ML data
     curtitle = get_human_readable_reaction_string(curreac, ref_priortable)
-    curfigure = figure(title=curtitle, width=1500, height=800, toolbar_location='above', name=curreac)
-    Emin, Emax, is_empty = plot_expdata(curfigure, curreac, exptable, datacol='RATIO')
-    if not is_empty:
+    curfigure = figure(title=curtitle, width=1500, height=800, toolbar_location='above', name=curreac, x_axis_type='log')
+    curexptable = get_expdata_for_reaction(curreac, exptable, datacol='RATIO')
+    if len(curexptable) > 0:
+        Emin = curexptable.ENERGY.min()
+        Emax = curexptable.ENERGY.max()
         for pred in pred_list:
             plot_evaluation(
                 curfigure, curreac, pred['pred_dt'], 'RATIO',
                 Emin*0.9, Emax*1.1, label=pred['label'],
                 color=pred['color'], style=pred['style'],
             )
+        plot_expdata(curfigure, curreac, curexptable, datacol='RATIO', include_usu=False)
         subfigures.append(curfigure)
+        curfigure.xaxis.axis_label = 'energy [MeV]'
+        if mtnum in (1, 5):
+            curfigure.yaxis.axis_label = 'cross section [barn]'
         # save everything
         figures[curreac] = subfigures
 
