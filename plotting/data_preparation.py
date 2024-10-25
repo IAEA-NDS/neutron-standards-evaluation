@@ -92,9 +92,11 @@ def prepare_result_data(git_hash):
     # augment priortable with results
     red_priortable['POST'] = np.mean(chain[:, :len(red_priortable)], axis=0)
     red_priortable['POSTUNC'] = np.std(chain[:, :len(red_priortable)], axis=0)
+    red_priortable['OPT'] = np.array(optres.position)[:len(red_priortable)]
 
     priortable.loc[is_adj, 'POST'] = np.array(red_priortable['POST'])
     priortable.loc[is_adj, 'POSTUNC'] = np.array(red_priortable['POSTUNC'])
+    priortable.loc[is_adj, 'OPT'] = np.array(red_priortable['OPT'])
 
     # add column where uncertainties are inflated by USU components
     # as they are used/determined in the evaluation
@@ -114,6 +116,8 @@ def prepare_result_data(git_hash):
         'REAC': ['MT:6-R1:' + str(r) for r in (8,9,10)] ,
         'ENERGY': [0] * 3,
     })
+    pred_sacs_dt.loc[len(pred_sacs_dt.index)] = ['exp_1003', 'MT:10-R1:9-R2:8', 0]
+    pred_sacs_dt.loc[len(pred_sacs_dt.index)] = ['exp_1004', 'MT:10-R1:10-R2:8', 0]
 
     compmap_sacs = CompoundMap((priortable, pred_sacs_dt), reduce=True)
     restrmap_sacs = RestrictedMap(
@@ -131,8 +135,8 @@ def prepare_result_data(git_hash):
     sacs_values = np.mean(prop_chain_sacs, axis=0)
     sacs_uncs = np.std(prop_chain_sacs, axis=0)
 
-    pred_sacs_dt['POST'] = sacs_values
-    pred_sacs_dt['POSTUNC'] = sacs_uncs
+    pred_sacs_dt['MCMC'] = sacs_values
+    pred_sacs_dt['OPT'] = restrmap_prop_sacs(red_priortable['OPT'])
 
     # create the mapping object
     compmap = CompoundMap((priortable, std2017_dt), reduce=True)
