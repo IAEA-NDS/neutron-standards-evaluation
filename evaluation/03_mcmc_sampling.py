@@ -19,7 +19,7 @@ optres, = load_objects(
 )
 
 # set seed for MCMC
-tf.random.set_seed(42)
+tf.random.set_seed(42)  # again
 
 # define essential input quantities for MCMC
 optvals = optres.position
