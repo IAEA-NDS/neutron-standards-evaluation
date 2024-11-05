@@ -2,7 +2,6 @@ import sys
 sys.path.append('../data')
 
 import joblib  # for caching
-
 import pandas as pd
 from gmapy.data_management.object_utils import load_objects
 import numpy as np
@@ -38,7 +37,7 @@ def parse_reaction_string(reacstr):
 
 
 def get_human_readable_reaction_string(reacstr, priortable):
-    mt, *reacnums = parse_reaction_string(reacstr) 
+    mt, *reacnums = parse_reaction_string(reacstr)
     p = priortable.loc[
         priortable.NODE.str.startswith('xsid_'), ['REAC', 'DESCR']
     ].drop_duplicates()
@@ -67,7 +66,7 @@ def load_evaluation(git_hash, label, color, style):
     dfs = prepare_result_data(git_hash)
     return {
         'git_hash': git_hash,
-        'pred_dt': dfs['pred_dt'], 
+        'pred_dt': dfs['pred_dt'],
         'label': label ,
         'color': color,
         'style': style,
@@ -77,12 +76,16 @@ def load_evaluation(git_hash, label, color, style):
 
 
 @mem.cache
-def prepare_result_data(git_hash):
+def prepare_result_data(git_hash, usu_info=False, extra_info=False):
     curcalc = f'../output/{git_hash}/output'
     priortable, is_adj, exptable, restrimap = \
         load_objects(f'{curcalc}/01_model_preparation_output.pkl',
                      'priortable', 'is_adj',
                      'exptable', 'restrimap')
+    if usu_info:
+        usu_df, = load_objects(
+            f'{curcalc}/01_model_preparation_output.pkl', 'red_usu_df'
+        )
     chain, = load_objects(f'{curcalc}/03_mcmc_sampling_output.pkl', 'chain')
     optres, = load_objects(f'{curcalc}/02_parameter_optimization_output.pkl', 'optres')
     eval_maxlike_raw = optres.position.numpy()
@@ -223,10 +226,23 @@ def prepare_result_data(git_hash):
     pred_dt['PREDUNC'] = eval_mcmc_unc2
     pred_dt['MAXLIKE'] = eval_maxlike2
 
-    return {
+    ret = {
         'priortable': priortable,
         'pred_dt': pred_dt,
         'exptable': exptable2,
         'std2017_dt': std2017_dt,
         'pred_sacs_dt': pred_sacs_dt,
     }
+    if extra_info:
+        ret.update({
+            'red_priortable': red_priortable,
+            'chain': chain,
+            'propagators': {
+                'sacs': restrmap_prop_sacs,
+                'pred': compmap2,
+            }
+        })
+    if usu_info:
+        ret.update({'usu_df': usu_df})
+
+    return ret
