@@ -93,6 +93,18 @@ pred_list.append(
 )
 cols.append("PRED")
 
+endfb81_u8_file = os.path.join(endfb81_path, 'n-092_U_238.endf')
+u8_nf_dt = load_endf_evaluation(endfb81_u8_file, 18, 8)
+pred_list.append(
+    {
+        'git_hash': None,
+        'pred_dt': u8_nf_dt,
+        'label': 'b81',
+        'color': 'blue',
+        'style': 'solid',
+    }
+)
+cols.append("PRED")
 
 # interpolate STD2017 to energies of experiments and predictions
 dt_list = [v['pred_dt'] for v in pred_list]
