@@ -77,7 +77,7 @@ def load_evaluation(git_hash, label, color, style):
 
 @mem.cache
 def prepare_result_data(git_hash, usu_info=False, extra_info=False):
-    curcalc = f'../output/{git_hash}/output'
+    curcalc = f'../output/{git_hash}/evaluation/output'
     priortable, is_adj, exptable, restrimap = \
         load_objects(f'{curcalc}/01_model_preparation_output.pkl',
                      'priortable', 'is_adj',
