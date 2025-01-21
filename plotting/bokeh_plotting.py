@@ -243,6 +243,10 @@ for curreac in pred_list[0]['pred_dt'].REAC.unique():
         plot_expdata(curfigure, curreac, curexptable, datacol='RATIO', include_usu=False)
         subfigures.append(curfigure)
         curfigure.xaxis.axis_label = 'energy [MeV]'
+        curfigure.xaxis.axis_label_text_font_size = '30pt'
+        curfigure.yaxis.axis_label_text_font_size = '30pt'
+        curfigure.xaxis.major_label_text_font_size = '20pt'
+        curfigure.yaxis.major_label_text_font_size = '20pt'
         if mtnum in (1, 5):
             curfigure.yaxis.axis_label = 'cross section [barn]'
         # save everything
