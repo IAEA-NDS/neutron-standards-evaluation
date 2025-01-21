@@ -21,7 +21,7 @@ done
 cd ..
 aws s3 cp "evaluation" "s3://gmapy-results/$branch_name/evaluation/" --recursive
 aws s3 cp "data" "s3://gmapy-results/$branch_name/data/" --recursive
-aws s3 cp "gmapy" "s3://gmapy-results/$branch_name/gmapy/" --recursive
+aws s3 cp "gmapy" "s3://gmapy-results/$branch_name/gmapy/" --recursive --exclude ".git/*"
 
 # terminate instance if copying successful
 if [ "$?" -eq 0 ]; then
