@@ -18,7 +18,9 @@ while [ ! -e "finished_sampling" ]; do
     sleep 10
 done
 
-aws s3 cp "." "s3://gmapy-results/$branch_name/" --recursive
+cd ..
+aws s3 cp "evaluation" "s3://gmapy-results/$branch_name/evaluation/" --recursive
+aws s3 cp "data" "s3://gmapy-results/$branch_name/data/" --recursive
 
 # terminate instance if copying successful
 if [ "$?" -eq 0 ]; then
