@@ -36,7 +36,7 @@ from data_preparation import (
 )
 
 # only used for renormalization
-dfs = prepare_result_data('1e8ce5e')
+dfs = prepare_result_data('08923b6')
 exptable = dfs['exptable']
 
 # reference cross section
