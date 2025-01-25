@@ -157,6 +157,7 @@ usu_df = usu_df[~(usu_df.NODE == 'endep_abs_usu_1003')]
 usu_df = usu_df[~(usu_df.NODE == 'endep_abs_usu_1028')]
 # remove USU of NIFFTE TPC PU9/U5 fission measurement, believed to very accurate
 usu_df = usu_df[~(usu_df.NODE == 'endep_abs_usu_6001')]
+usu_df = usu_df[~(usu_df.NODE == 'endep_abs_usu_6002')]
 usu_df = usu_df.reset_index(drop=True)
 # variation-01: end
 
