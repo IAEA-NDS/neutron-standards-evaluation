@@ -39,7 +39,7 @@ tfd = tfp.distributions
 tfb = tfp.bijectors
 
 # retrieve prior estimates and covariances from the database
-db_path = '../data/data.json'
+db_path = '../data/data2017.json'
 db = read_gma_database(db_path)
 remove_dummy_datasets(db['datablock_list'])
 
@@ -52,10 +52,7 @@ expcov = create_experimental_covmat(db['datablock_list'])
 exptable['UNC'] = np.sqrt(expcov.diagonal())
 
 # variation-01: remove specific experimental datasets after visual inspection
-exp_remove_mask = (exptable.NODE == 'exp_722') & (exptable.ENERGY > 23)  # Ponkratov U5(n,f) shape beyond 23 MeV
-exp_remove_mask |= (exptable.NODE == 'exp_8008')  # removal of Nolte abs. U8(n,f) measurement (34 - 200 MeV)
-exp_remove_mask |= (exptable.NODE == 'exp_874') & (exptable.ENERGY > 23)  # Ponkratov U8(n,f) shape beyond 23 MeV
-exp_remove_mask |= (exptable.NODE == 'exp_524') & (exptable.ENERGY > 27)  # A.D. Carlson PU5(n,f) above 27 MeV
+exp_remove_mask = np.full(len(exptable), False)
 exp_keep_idcs = np.where(~exp_remove_mask)[0]
 exptable = exptable.loc[exp_keep_idcs].reset_index(drop=True)
 expcov = csr_matrix(expcov.toarray()[np.ix_(exp_keep_idcs, exp_keep_idcs)])
@@ -129,12 +126,6 @@ usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:4-R1:10-R2:8',), (0.1, 1.,
 usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:4-R1:9-R2:8',), (1e-3, 1e-2, 1e-1, 1., 5., 15., 30.), (1e-2,)*7))
 usu_df = pd.concat(usu_dfs, ignore_index=True)
 
-# variation-01: remove usu treatment for specific datasets (after visual inspection of results)
-usu_df = usu_df[~(usu_df.NODE == 'endep_abs_usu_521')]
-usu_df = usu_df[~(usu_df.NODE == 'endep_abs_usu_1003')]
-usu_df = usu_df[~(usu_df.NODE == 'endep_abs_usu_1028')]
-usu_df = usu_df.reset_index(drop=True)
-# variation-01: end
 
 usu_map = EnergyDependentAbsoluteUSUMap((usu_df, exptable), reduce=True)
 usu_jac = tf.sparse.to_dense(usu_map.jacobian(usu_df.PRIOR.to_numpy()))
