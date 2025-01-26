@@ -94,7 +94,7 @@ pred_list.append(
 cols.append("PRED")
 
 endfb81_u8_file = os.path.join(endfb81_path, 'n-092_U_238.endf')
-u8_nf_dt = load_endf_evaluation(endfb81_u8_file, 18, 8)
+u8_nf_dt = load_endf_evaluation(endfb81_u8_file, 18, 10)
 pred_list.append(
     {
         'git_hash': None,
