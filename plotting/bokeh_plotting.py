@@ -36,7 +36,7 @@ from data_preparation import (
 )
 
 # only used for renormalization
-dfs = prepare_result_data('08923b6')
+dfs = prepare_result_data('793eb25')
 exptable = dfs['exptable']
 
 # reference cross section
@@ -51,14 +51,14 @@ cols = []
 # pred_list.append(load_evaluation('f42e55d', '1013 to shape', 'blue', 'dotdash'))
 # pred_list.append(load_evaluation('1e8ce5e', 'recommend_new MCMC', 'orange', 'dashed'))
 # cols.append("PRED")
-pred_list.append(load_evaluation('1e8ce5e', 'latest evaluation', 'green', 'solid'))
+pred_list.append(load_evaluation('793eb25', 'templ+NIFFTE21 (MLE)', 'green', 'solid'))
 cols.append("MAXLIKE")
-# pred_list.append(load_evaluation('ea40e40', 'liso_rel_low_unc', 'brown', 'dotdash'))
-# cols.append("PRED")
-# pred_list.append(load_evaluation('003a588', 'liso_abs_low_unc', 'blue', 'dotdash'))
-# cols.append("PRED")
-# pred_list.append(load_evaluation('55c975c', 'liso_abs', 'black', 'solid'))
-# cols.append("PRED")
+pred_list.append(load_evaluation('793eb25', 'templ+NIFFTE21 (MCMC)', 'brown', 'dotdash'))
+cols.append("PRED")
+pred_list.append(load_evaluation('0b99af7', 'STD2017 (MLE)', 'blue', 'dotdash'))
+cols.append("MAXLIKE")
+pred_list.append(load_evaluation('0b99af7', 'STD2017 (MCMC)', 'black', 'solid'))
+cols.append("PRED")
 # pred_list.append(load_evaluation('fc8634c', 'no TPC>7 MeV', 'cyan', 'dashed'))
 # cols.append("PRED")
 # pred_list.append(load_evaluation('04cc6d2', 'drop Sherbakov exp (1012) OPT', 'red', 'solid'))
