@@ -1,3 +1,6 @@
 [submodule "gmapy"]
 	path = gmapy
 	url = ../gmapy/
+[submodule "data"]
+	path = data
+	url = https://github.com/iaea-nds/neutron-standards-database.git
