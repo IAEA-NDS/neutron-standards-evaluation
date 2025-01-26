@@ -212,7 +212,7 @@ def plot_evaluation(figure, reac, pred_dt, datacol, Emin, Emax, label, color, st
     cursource = ColumnDataSource(data=cdt)
     figure.line(
         'ENERGY', datacol, source=cursource,
-        color=color, line_dash=style, legend_label=label, line_width=2)
+        color=color, line_dash=style, legend_label=label, line_width=4)
 
 # plot comparing absolute cross sections
 
@@ -242,11 +242,13 @@ for curreac in pred_list[0]['pred_dt'].REAC.unique():
             )
         plot_expdata(curfigure, curreac, curexptable, datacol='RATIO', include_usu=False)
         subfigures.append(curfigure)
+        curfigure.title.text_font_size = '20pt'
         curfigure.xaxis.axis_label = 'energy [MeV]'
-        curfigure.xaxis.axis_label_text_font_size = '30pt'
-        curfigure.yaxis.axis_label_text_font_size = '30pt'
+        curfigure.xaxis.axis_label_text_font_size = '20pt'
+        curfigure.yaxis.axis_label_text_font_size = '20pt'
         curfigure.xaxis.major_label_text_font_size = '20pt'
         curfigure.yaxis.major_label_text_font_size = '20pt'
+        curfigure.legend.label_text_font_size = '15pt'
         if mtnum in (1, 5):
             curfigure.yaxis.axis_label = 'cross section [barn]'
         # save everything
