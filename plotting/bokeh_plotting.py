@@ -250,7 +250,9 @@ for curreac in pred_list[0]['pred_dt'].REAC.unique():
         curfigure.yaxis.major_label_text_font_size = '20pt'
         curfigure.legend.label_text_font_size = '15pt'
         if mtnum in (1, 5):
-            curfigure.yaxis.axis_label = 'cross section [barn]'
+            curfigure.yaxis.axis_label = 'xs relative to std2017'
+        elif mtnum in (3,):
+            curfigure.yaxis.axis_label = 'ratio relative to std2017'
         # save everything
         figures[curreac] = subfigures
 
