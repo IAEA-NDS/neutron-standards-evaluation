@@ -129,6 +129,8 @@ replace_mt('exp_631', 3, 4)
 replace_mt('exp_1012', 3, 4)
 replace_mt('exp_6001', 4, 3)
 
+# Convert Lisowski to absolute
+replace_mt('exp_1028', 2, 1)
 
 # initialize the normalization errors
 priortable, priorcov = attach_shape_prior((priortable, exptable), covmat=priorcov, raise_if_exists=False)
