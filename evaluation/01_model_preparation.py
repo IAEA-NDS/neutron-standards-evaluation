@@ -89,7 +89,7 @@ assert np.allclose(sysvec.T @ correct_liso_expcov @ sysvec, 0.)
 
 # but now we have a rank deficient matrix because we remove the "systemtic direction"
 # add a small systematic uncertainty re-gain positive definiteness
-correct_liso_expcov += 1e-10 * (sysvec @ sysvec.T)
+correct_liso_expcov += 1e-2 * (sysvec @ sysvec.T)
 
 # write the corrected Lisowski data back into the global covariance matrix
 expcov[np.ix_(liso_idcs, liso_idcs)] = correct_liso_expcov
