@@ -52,50 +52,6 @@ exptable = create_experiment_table(db['datablock_list'])
 expcov = create_experimental_covmat(db['datablock_list'])
 exptable['UNC'] = np.sqrt(expcov.diagonal())
 
-####################################################################
-# Remove systematic normalization uncertainty from Lisowski (1028)
-####################################################################
-
-expcov = create_experimental_covmat(db['datablock_list'], relative=True)
-
-# ensure that Lisowski isn't correlated with any other dataset
-liso_mask = np.array(exptable.NODE == 'exp_1028')
-assert np.all(expcov[np.ix_(liso_mask, ~liso_mask)].toarray() == 0.0)
-
-# extract Lisowski covariance matrix
-liso_idcs = np.array(exptable.index[exptable.NODE == 'exp_1028'])
-liso_expcov = expcov[np.ix_(liso_idcs, liso_idcs)]
-
-# generate a vector of unit length corresponding to a normalization factor
-unnorm_sysvec = np.full((len(liso_idcs), 1), 1.0)
-unnorm_sysvec_length = np.sqrt(np.sum(np.square(unnorm_sysvec)))
-sysvec = unnorm_sysvec / unnorm_sysvec_length
-
-# just for checking: calculate magnitude of systematic uncertainty
-sysvar = (sysvec.T @ liso_expcov @ sysvec).item()
-unnorm_sysvar = sysvar / np.square(unnorm_sysvec_length)
-unnorm_sysunc = np.sqrt(unnorm_sysvar)
-print(f'---> Systematic uncertainty of Lisowski is {unnorm_sysunc*100:.2f}%')
-
-# generate a projector that removes the systematic direction
-idmat = np.identity(len(liso_idcs))
-proj = (idmat - sysvec @ sysvec.T)
-
-# apply the projector left and right on Liso experimental covariance matrix
-correct_liso_expcov = (proj.T) @ liso_expcov @ proj
-
-# assert that the operation had the intended effect
-assert np.allclose(sysvec.T @ correct_liso_expcov @ sysvec, 0.)
-
-# but now we have a rank deficient matrix because we remove the "systemtic direction"
-# add a small systematic uncertainty re-gain positive definiteness
-correct_liso_expcov += 1e-10 * (sysvec @ sysvec.T)
-
-# write the corrected Lisowski data back into the global covariance matrix
-expcov[np.ix_(liso_idcs, liso_idcs)] = correct_liso_expcov
-
-#######################################################################
-
 # variation-01: remove specific experimental datasets after visual inspection
 exp_remove_mask = (exptable.NODE == 'exp_722') & (exptable.ENERGY > 23)  # Ponkratov U5(n,f) shape beyond 23 MeV
 exp_remove_mask |= (exptable.NODE == 'exp_874') & (exptable.ENERGY > 23)  # Ponkratov U8(n,f) shape beyond 23 MeV
@@ -144,18 +100,11 @@ expvals = exptable.DATA.to_numpy()
 # speed up the pdf log_prob calculations exploiting the block diagonal structure
 expcov_list, idcs_tuples = create_datablock_covmat_list(db['datablock_list'], relative=True)
 # variation-01: remove certain points in datablocks
-found_liso_expcov = False
 for i in range(len(expcov_list)):
     cur_idcs = np.arange(idcs_tuples[i][0], idcs_tuples[i][1]+1)
-    # replace the Lisowski expcov by the corrected one
-    if np.array_equal(cur_idcs, liso_idcs):
-        found_liso_expcov = True
-        assert np.all(liso_expcov == expcov_list[i].toarray())
-        expcov_list[i] = csr_matrix(correct_liso_expcov)
     cur_idcs = cur_idcs[np.isin(cur_idcs, exp_keep_idcs)] - idcs_tuples[i][0]
     expcov_list[i] = csr_matrix(expcov_list[i].toarray()[np.ix_(cur_idcs, cur_idcs)])
 
-assert found_liso_expcov
 expcov_list = [x for x in expcov_list if x.shape != (0, 0)]
 
 # variation-01 end
