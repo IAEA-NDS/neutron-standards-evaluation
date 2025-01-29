@@ -6,6 +6,7 @@ from bokeh.models import (
     ColumnDataSource,
     HoverTool,
     Row,
+    Column,
     Select,
     CustomJS,
     Dropdown,
@@ -206,6 +207,7 @@ def plot_evaluation(figure, reac, pred_dt, datacol, Emin, Emax, label, color, st
         'ENERGY', datacol, source=cursource,
         color=color, line_dash=style, legend_label=label, line_width=4)
 
+
 # plot comparing absolute cross sections
 
 figures = {}
@@ -221,11 +223,12 @@ for curreac in pred_list[0]['pred_dt'].REAC.unique():
     subfigures = []
     # first with RENORM_ML data
     curtitle = get_human_readable_reaction_string(curreac, ref_priortable)
-    curfigure = figure(title=curtitle, width=1500, height=800, toolbar_location='above', name=curreac, x_axis_type='log')
     curexptable = get_expdata_for_reaction(curreac, exptable, datacol='RATIO')
     if len(curexptable) > 0:
         Emin = curexptable.ENERGY.min()
         Emax = curexptable.ENERGY.max()
+        curfigure = figure(title=curtitle, width=1500, height=800, toolbar_location='above', name=curreac, x_axis_type='log')
+        subfigures.append(curfigure)
         for pred in pred_list:
             plot_evaluation(
                 curfigure, curreac, pred['pred_dt'], 'RATIO',
@@ -233,7 +236,6 @@ for curreac in pred_list[0]['pred_dt'].REAC.unique():
                 color=pred['color'], style=pred['style'],
             )
         plot_expdata(curfigure, curreac, curexptable, datacol='RATIO', include_usu=False)
-        subfigures.append(curfigure)
         curfigure.title.text_font_size = '20pt'
         curfigure.xaxis.axis_label = 'energy [MeV]'
         curfigure.xaxis.axis_label_text_font_size = '20pt'
@@ -246,6 +248,30 @@ for curreac in pred_list[0]['pred_dt'].REAC.unique():
         elif mtnum in (3,):
             curfigure.yaxis.axis_label = 'ratio relative to std2017'
         # save everything
+
+        # figure with uncertainites
+        curfigure = figure(title=curtitle, width=1500, height=800, toolbar_location='above', name=curreac, x_axis_type='log')
+        subfigures.append(curfigure)
+        for pred in pred_list:
+            t = pred['pred_dt']
+            try:
+                t['PREDUNC_PERCENT'] = t['PREDUNC'] / t['PRED'] * 100
+            except:
+                continue
+            plot_evaluation(
+                curfigure, curreac, pred['pred_dt'], 'PREDUNC_PERCENT',
+                Emin*0.9, Emax*1.1, label=pred['label'],
+                color=pred['color'], style=pred['style'],
+            )
+        curfigure.title.text_font_size = '20pt'
+        curfigure.xaxis.axis_label = 'energy [MeV]'
+        curfigure.xaxis.axis_label_text_font_size = '20pt'
+        curfigure.yaxis.axis_label_text_font_size = '20pt'
+        curfigure.xaxis.major_label_text_font_size = '20pt'
+        curfigure.yaxis.major_label_text_font_size = '20pt'
+        curfigure.legend.label_text_font_size = '15pt'
+        curfigure.yaxis.axis_label = 'uncertainty [percent]'
+
         figures[curreac] = subfigures
 
 
@@ -289,8 +315,8 @@ for k, p in figures.items():
     groupname = get_groupname(k)
     curgroup = panel_groups.setdefault(groupname, [])
     if len(p) > 0:
-        currow = row(p[0])  # if several panels: row(p[0], p[1], ...)
-        curgroup.append(TabPanel(child=currow, title=k))
+        curcolumn= column(*p)  # if several panels: row(p[0], p[1], ...)
+        curgroup.append(TabPanel(child=curcolumn, title=k))
 
 super_panel_groups = []
 for k, p in panel_groups.items():
