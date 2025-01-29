@@ -140,6 +140,7 @@ def prepare_result_data(git_hash, usu_info=False, extra_info=False):
 
     pred_sacs_dt['MCMC'] = sacs_values
     pred_sacs_dt['OPT'] = restrmap_prop_sacs(red_priortable['OPT'])
+    pred_sacs_dt['UNC'] = sacs_uncs
 
     # create the mapping object
     compmap = CompoundMap((priortable, std2017_dt), reduce=True)
