@@ -151,15 +151,7 @@ usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:4-R1:10-R2:8',), (0.1, 1.,
 usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:4-R1:9-R2:8',), (1e-3, 1e-2, 1e-1, 1., 5., 15., 30.), (1e-2,)*7))
 usu_df = pd.concat(usu_dfs, ignore_index=True)
 
-# variation-01: remove usu treatment for specific datasets (after visual inspection of results)
-usu_df = usu_df[~(usu_df.NODE == 'endep_abs_usu_521')]
-usu_df = usu_df[~(usu_df.NODE == 'endep_abs_usu_1003')]
-usu_df = usu_df[~(usu_df.NODE == 'endep_abs_usu_1028')]
-# remove USU of NIFFTE TPC PU9/U5 fission measurement, believed to very accurate
-usu_df = usu_df[~(usu_df.NODE == 'endep_abs_usu_6001')]
-usu_df = usu_df[~(usu_df.NODE == 'endep_abs_usu_6002')]
 usu_df = usu_df.reset_index(drop=True)
-# variation-01: end
 
 usu_map = EnergyDependentAbsoluteUSUMap((usu_df, exptable), reduce=True)
 usu_jac = tf.sparse.to_dense(usu_map.jacobian(usu_df.PRIOR.to_numpy()))
