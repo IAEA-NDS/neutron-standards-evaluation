@@ -36,7 +36,7 @@ from data_preparation import (
 )
 
 # only used for renormalization
-dfs = prepare_result_data('08923b6')
+dfs = prepare_result_data('0b3b829')
 exptable = dfs['exptable']
 
 # reference cross section
@@ -51,19 +51,16 @@ cols = []
 # pred_list.append(load_evaluation('f42e55d', '1013 to shape', 'blue', 'dotdash'))
 # pred_list.append(load_evaluation('1e8ce5e', 'recommend_new MCMC', 'orange', 'dashed'))
 # cols.append("PRED")
-pred_list.append(load_evaluation('1e8ce5e', 'latest evaluation', 'green', 'solid'))
-cols.append("MAXLIKE")
-# pred_list.append(load_evaluation('ea40e40', 'liso_rel_low_unc', 'brown', 'dotdash'))
-# cols.append("PRED")
-# pred_list.append(load_evaluation('003a588', 'liso_abs_low_unc', 'blue', 'dotdash'))
-# cols.append("PRED")
-# pred_list.append(load_evaluation('55c975c', 'liso_abs', 'black', 'solid'))
-# cols.append("PRED")
-# pred_list.append(load_evaluation('fc8634c', 'no TPC>7 MeV', 'cyan', 'dashed'))
-# cols.append("PRED")
-# pred_list.append(load_evaluation('04cc6d2', 'drop Sherbakov exp (1012) OPT', 'red', 'solid'))
-# cols.append("MAXLIKE")
-
+pred_list.append(load_evaluation('2e6955a', 'reg 1e-4', 'green', 'solid'))
+cols.append("PRED")
+pred_list.append(load_evaluation('948ba67', 'reg 1e-6', 'brown', 'dotdash'))
+cols.append("PRED")
+pred_list.append(load_evaluation('e078e95', 'reg 1e-7', 'blue', 'dotdash'))
+cols.append("PRED")
+pred_list.append(load_evaluation('0b3b829', 'reg 1e-8', 'black', 'solid'))
+cols.append("PRED")
+pred_list.append(load_evaluation('88e7cad', 'reg 1e-7 (other seed)', 'orange', 'solid'))
+cols.append("PRED")
 
 endfb81_path = '/home/gschnabel/bigdata/nuclibs/endfb8.1/neutrons-version.VIII.1'
 endfb81_pu9_file = os.path.join(endfb81_path, 'n-094_Pu_239.endf')
