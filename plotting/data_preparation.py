@@ -82,6 +82,7 @@ def prepare_result_data(git_hash, usu_info=False, extra_info=False):
         load_objects(f'{curcalc}/01_model_preparation_output.pkl',
                      'priortable', 'is_adj',
                      'exptable', 'restrimap')
+
     if usu_info:
         usu_df, = load_objects(
             f'{curcalc}/01_model_preparation_output.pkl', 'red_usu_df'
@@ -91,6 +92,12 @@ def prepare_result_data(git_hash, usu_info=False, extra_info=False):
     eval_maxlike_raw = optres.position.numpy()
 
     red_priortable = priortable.loc[is_adj, :].reset_index(drop=True)
+
+    # calculate inverse hessian (posterior covariance matrix)
+    post, = load_objects(f'{curcalc}/01_model_preparation_output.pkl', 'post')
+    post_hess = post.neg_log_prob_hessian(optres.position).numpy()
+    post_cov = np.linalg.inv(post_hess)
+    post_cov_restr = post_cov[np.ix_(*([np.arange(len(red_priortable))]*2))]
 
     # augment priortable with results
     red_priortable['POST'] = np.mean(chain[:, :len(red_priortable)], axis=0)
@@ -136,11 +143,18 @@ def prepare_result_data(git_hash, usu_info=False, extra_info=False):
         prop_chain_sacs[idx, :] = restrmap_prop_sacs(curchain)
 
     sacs_values = np.mean(prop_chain_sacs, axis=0)
-    sacs_uncs = np.std(prop_chain_sacs, axis=0)
+    sacs_uncs_mcmc = np.std(prop_chain_sacs, axis=0)
+
+    # calculate uncertainties using sandwhich (inverse hessian + jacobian)
+    post_jacmat = restrmap_sacs.jacobian(optres.position[:len(red_priortable)])
+    post_jacmat = tf.sparse.to_dense(post_jacmat).numpy()
+    t1 = post_jacmat @ post_cov_restr
+    sacs_uncs_maxlike = np.sqrt(np.sum(t1 * post_jacmat, axis=1))
 
     pred_sacs_dt['MCMC'] = sacs_values
     pred_sacs_dt['OPT'] = restrmap_prop_sacs(red_priortable['OPT'])
-    pred_sacs_dt['UNC'] = sacs_uncs
+    pred_sacs_dt['MCMC_UNC'] = sacs_uncs_mcmc
+    pred_sacs_dt['MAXLIKE_UNC'] = sacs_uncs_maxlike
 
     # create the mapping object
     compmap = CompoundMap((priortable, std2017_dt), reduce=True)
@@ -198,6 +212,7 @@ def prepare_result_data(git_hash, usu_info=False, extra_info=False):
 
     pred_dt = pd.concat(pred_dt_table, ignore_index=True)
     pred_dt = pred_dt.sort_values(['REAC', 'ENERGY']).reset_index(drop=True)
+    pred_dt['REAC_HUMAN'] = [get_human_readable_reaction_string(s, priortable) for s in pred_dt['REAC']]
 
     # create the mapping object
     priortable2 = priortable.copy()
@@ -226,6 +241,13 @@ def prepare_result_data(git_hash, usu_info=False, extra_info=False):
     pred_dt['PRED'] = eval_mcmc2
     pred_dt['PREDUNC'] = eval_mcmc_unc2
     pred_dt['MAXLIKE'] = eval_maxlike2
+
+    # calculate uncertainties using sandwhich (inverse hessian + jacobian)
+    post_jacmat = restrmap2.jacobian(optres.position[:len(red_priortable)])
+    post_jacmat = tf.sparse.to_dense(post_jacmat).numpy()
+    t1 = post_jacmat @ post_cov_restr
+    eval_opt_unc2 = np.sqrt(np.sum(t1 * post_jacmat, axis=1))
+    pred_dt['MAXLIKE_UNC'] = eval_opt_unc2
 
     ret = {
         'priortable': priortable,
