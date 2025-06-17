@@ -589,7 +589,7 @@
         {
           "type": "legacy-experiment-dataset",
           "NS": 6001,
-          "MT": 4,
+          "MT": 3,
           "YEAR": 2021,
           "TAG": 1,
           "NT": [9,8],
