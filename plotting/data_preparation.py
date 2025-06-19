@@ -150,6 +150,9 @@ def prepare_result_data(git_hash, usu_info=False, extra_info=False):
     post_jacmat = tf.sparse.to_dense(post_jacmat).numpy()
     t1 = post_jacmat @ post_cov_restr
     sacs_uncs_maxlike = np.sqrt(np.sum(t1 * post_jacmat, axis=1))
+    sacs_cov_maxlike = t1 @ post_jacmat.T
+    sacs_cor_maxlike = \
+            sacs_cov_maxlike / sacs_uncs_maxlike.reshape(-1,1) / sacs_uncs_maxlike.reshape(1,-1)
 
     pred_sacs_dt['MCMC'] = sacs_values
     pred_sacs_dt['OPT'] = restrmap_prop_sacs(red_priortable['OPT'])
@@ -255,6 +258,8 @@ def prepare_result_data(git_hash, usu_info=False, extra_info=False):
         'exptable': exptable2,
         'std2017_dt': std2017_dt,
         'pred_sacs_dt': pred_sacs_dt,
+        'sacs_cov_maxlike': sacs_cov_maxlike,
+        'sacs_cor_maxlike': sacs_cor_maxlike,
     }
     if extra_info:
         ret.update({
