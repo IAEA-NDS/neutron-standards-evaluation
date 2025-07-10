@@ -153,6 +153,7 @@ expcov_linop = tf.linalg.LinearOperatorComposition(
 # MT:4-R1:9-R2:8 at 0, 1, 5, 15 (likely USU at
 
 usu_dfs = []
+usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:1-R1:1',), (1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1e0, 2, 4), (1e-2,)*8))
 usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:1-R1:8',), (5e-3, 1e-1, 1., 5., 15., 30.), (1e-2,)*6))
 usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:1-R1:9',), (5e-3, 1e-1, 1., 5., 15., 30.), (1e-2,)*6))
 usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:2-R1:8',), (1e-3, 1e-2, 1e-1, 1., 5., 15., 30.), (1e-2,)*7))
