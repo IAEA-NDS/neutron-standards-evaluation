@@ -62,6 +62,7 @@ exp_remove_mask |= (exptable.NODE == 'exp_8029')
 exp_remove_mask |= (exptable.NODE == 'exp_1003')
 
 exp_keep_idcs = np.where(~exp_remove_mask)[0]
+orig_exptable = exptable
 exptable = exptable.loc[exp_keep_idcs].reset_index(drop=True)
 expcov = csr_matrix(expcov.toarray()[np.ix_(exp_keep_idcs, exp_keep_idcs)])
 # variation-01 end
@@ -99,9 +100,25 @@ expvals = exptable.DATA.to_numpy()
 expcov_list, idcs_tuples = create_datablock_covmat_list(db['datablock_list'], relative=True)
 # variation-01: remove certain points in datablocks
 for i in range(len(expcov_list)):
-    cur_idcs = np.arange(idcs_tuples[i][0], idcs_tuples[i][1]+1)
-    cur_idcs = cur_idcs[np.isin(cur_idcs, exp_keep_idcs)] - idcs_tuples[i][0]
-    expcov_list[i] = csr_matrix(expcov_list[i].toarray()[np.ix_(cur_idcs, cur_idcs)])
+    cur_idcs_abs = np.arange(idcs_tuples[i][0], idcs_tuples[i][1]+1)
+    cur_idcs = cur_idcs_abs[np.isin(cur_idcs_abs, exp_keep_idcs)] - idcs_tuples[i][0]
+    workmat = expcov_list[i].toarray()
+    # rescale the 6Li(n,t) and 6Li(n,n) covariance matrix 
+    workexptable = orig_exptable.iloc[cur_idcs_abs]
+    sel_lithium6 = np.array(workexptable.REAC.str.match('^MT:[12]-R1:[12]$'))
+    if np.any(sel_lithium6):
+        lithium6_idcs = np.where(sel_lithium6)[0]
+        workmat[np.ix_(lithium6_idcs, lithium6_idcs)] += np.full([len(lithium6_idcs)]*2, 0.01)
+    # rescale the 10B(n,a1) covariance matrix 
+    sel_boron10 = np.array(workexptable.REAC.str.match("^MT:[12]-R1:4$"))
+    if np.any(sel_boron10):
+        boron10_idcs = np.where(sel_boron10)[0]
+        workmat[np.ix_(boron10_idcs, boron10_idcs)] += np.full([len(boron10_idcs)]*2, 0.01)
+    # remove problematic points
+    workmat = workmat[np.ix_(cur_idcs, cur_idcs)]
+    # register updated covariance matrix
+    expcov_list[i] = csr_matrix(workmat)
+
 
 expcov_list = [x for x in expcov_list if x.shape != (0, 0)]
 
