@@ -164,6 +164,23 @@ usu_df = usu_df.reset_index(drop=True)
 usu_map = EnergyDependentAbsoluteUSUMap((usu_df, exptable), reduce=True)
 usu_jac = tf.sparse.to_dense(usu_map.jacobian(usu_df.PRIOR.to_numpy()))
 
+# reduce the usu_jac because we assume the USU errors to be the
+# same for all datapoints of different datasets at the same energy
+collapsed_usu_df = usu_df[['REAC', 'ENERGY']].drop_duplicates().reset_index(drop=True)
+collapsed_usu_df['IDX'] = collapsed_usu_df.index
+
+idcs1 = usu_df.index.to_numpy()
+idcs2 = usu_df.merge(collapsed_usu_df)['IDX'].to_numpy()
+S2 = np.zeros((len(usu_df), len(collapsed_usu_df)), dtype=float)
+S2[idcs1, idcs2] = 1.0
+
+new_usu_jac = usu_jac @ S2
+
+# Here the USU error mapping assuming that the
+# same USU error is shared by all datapoints of different datasets
+# at the same energy
+usu_jac = new_usu_jac
+usu_df = collapsed_usu_df
 
 
 def create_like_cov_fun(usu_df, expcov_linop, Smat):
