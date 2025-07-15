@@ -44,6 +44,18 @@ db_path = '../data/data.json'
 db = read_gma_database(db_path)
 remove_dummy_datasets(db['datablock_list'])
 
+# start: remove outlier treatment uncertainties
+any_nonzero = False
+for curblock in db['datablock_list']:
+    for curdataset in curblock['datasets']:
+        if 'CO' not in curdataset:
+            continue
+        assert len(curdataset['CO'][0]) == 12
+        # any_nonzero |= any(uncs[10] != 0 for uncs in curdataset['CO'])
+        for cur_uncs in curdataset['CO']:
+            cur_uncs[10] = 0.0
+# end: remove outlier treatment uncertainties
+
 priortable = create_prior_table(db['prior_list'])
 priorcov = create_prior_covmat(db['prior_list'])
 
