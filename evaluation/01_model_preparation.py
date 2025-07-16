@@ -176,11 +176,17 @@ usu_df = usu_df.reset_index(drop=True)
 usu_map = EnergyDependentAbsoluteUSUMap((usu_df, exptable), reduce=True)
 usu_jac = tf.sparse.to_dense(usu_map.jacobian(usu_df.PRIOR.to_numpy()))
 
-# reduce the usu_jac because we assume the USU errors to be the
-# same for all datapoints of different datasets at the same energy
-collapsed_usu_df = usu_df[['REAC', 'ENERGY']].drop_duplicates().reset_index(drop=True)
-collapsed_usu_df['IDX'] = collapsed_usu_df.index
+# augment USU df with the measurement method feature
+usu_df['METHOD'] = 'other'
+usu_df.loc[usu_df.NODE.str.match('^.*_600[012]$'), 'METHOD'] = 'tpc'
 
+# create collapsed usu dataframe that summarizes shared bias terms
+collapsed_usu_df = usu_df[['REAC', 'ENERGY', 'METHOD']].drop_duplicates().reset_index(drop=True)
+collapsed_usu_df['IDX'] = collapsed_usu_df.index
+collapsed_usu_df
+
+# create mapping matrix to map the biases corresponding to the collapsed USU dataframe
+# to the individual experimental datasets
 idcs1 = usu_df.index.to_numpy()
 idcs2 = usu_df.merge(collapsed_usu_df)['IDX'].to_numpy()
 S2 = np.zeros((len(usu_df), len(collapsed_usu_df)), dtype=float)
