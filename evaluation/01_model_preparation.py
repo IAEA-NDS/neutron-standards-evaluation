@@ -57,10 +57,10 @@ energies = np.arange(1, 10)
 true_values = np.array([20] * len(energies), dtype=float)
 sys_unc = 0.1
 stat_unc = 0.01
-num_datasets = 2 
+num_datasets = 3
 sys_unc = rng.standard_normal(num_datasets) * sys_unc
 sys_err = [rng.standard_normal(1)*s for s in sys_unc] 
-sys_err = [-0.1, 0.1]
+sys_err = [-0.1, 0.1, 0.1]
 
 expdata_list = []
 for expid in range(num_datasets):
@@ -69,6 +69,7 @@ for expid in range(num_datasets):
     expvalues += true_values * sys_err[expid]
     expdata = pd.DataFrame({
         'NODE': f'exp_{expid}',
+        'REAL_NODE': f'exp_{expid}',
         'REAC': 'MT:1-R1:1',
         'ENERGY': energies,
         'DATA': expvalues,
@@ -80,6 +81,7 @@ for expid in range(num_datasets):
 
 
 exptable = pd.concat(expdata_list)
+exptable.loc[exptable.NODE == 'exp_2', 'NODE'] = 'exp_1' 
 expcov = diags(np.square(exptable['UNC'].tolist()))
 
 # initialize the normalization errors

@@ -35,10 +35,10 @@ postuncs_usu_abs = np.sqrt(np.diag(postcov_usu))
 
 
 def plot_eval(priortable, exptable, postuncs_abs, expcov_abs):
-    expids = pd.unique(exptable.NODE)
+    expids = pd.unique(exptable.REAL_NODE)
     expuncs_abs = np.sqrt(np.diag(expcov_abs))
     for expid in expids:
-        curdt = exptable[exptable.NODE == expid]
+        curdt = exptable[exptable.REAL_NODE == expid]
         curuncs = expuncs_abs[curdt.index]
         plt.errorbar(curdt.ENERGY, curdt.DATA, curuncs)
         plt.plot(curdt.ENERGY, curdt.DATA)
@@ -50,8 +50,11 @@ def plot_eval(priortable, exptable, postuncs_abs, expcov_abs):
 plot_eval(priortable, exptable, postuncs_usu_abs, expcov_usu)
 
 expcor_usu = expcov_usu / np.sqrt((np.reshape(np.diag(expcov_usu), (-1,1)) * np.reshape(np.diag(expcov_usu), (1,-1))))
-
 expcor = expcov / np.sqrt((np.reshape(np.diag(expcov), (-1,1)) * np.reshape(np.diag(expcov), (1,-1))))
 
-plt.imshow(expcor_usu)
+
+postcor = postcov / np.sqrt((np.reshape(np.diag(postcov), (-1,1)) * np.reshape(np.diag(postcov), (1,-1))))
+postcor_usu = postcov_usu / np.sqrt((np.reshape(np.diag(postcov_usu), (-1,1)) * np.reshape(np.diag(postcov_usu), (1,-1))))
+
+plt.imshow(postcor_usu, cmap='coolwarm', vmin=-1, vmax=1)
 plt.show()
