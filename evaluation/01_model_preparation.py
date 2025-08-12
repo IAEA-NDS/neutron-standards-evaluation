@@ -1,6 +1,6 @@
 import re
 import pandas as pd
-from scipy.sparse import block_diag, csr_matrix
+from scipy.sparse import block_diag, csr_matrix, diags
 import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
@@ -39,52 +39,48 @@ from gmapy.tf_uq.custom_distributions import (
 tfd = tfp.distributions
 tfb = tfp.bijectors
 
-# retrieve prior estimates and covariances from the database
-db_path = '../data/data.json'
-db = read_gma_database(db_path)
-remove_dummy_datasets(db['datablock_list'])
+priortable = pd.DataFrame({
+    'NODE': 'xsid_1',
+    'REAC': 'MT:1-R1:1',
+    'ENERGY': np.arange(1, 10),
+    'PRIOR': 17.0,
+    'UNC': np.inf,
+    'DESCR': 'channel'
+})
+priorcov = diags(priortable['UNC'])
 
-priortable = create_prior_table(db['prior_list'])
-priorcov = create_prior_covmat(db['prior_list'])
 
 # prepare experimental quantities
-exptable = create_experiment_table(db['datablock_list'])
-expcov = create_experimental_covmat(db['datablock_list'])
-exptable['UNC'] = np.sqrt(expcov.diagonal())
+rng = np.random.default_rng()
 
-# variation-01: remove specific experimental datasets after visual inspection
-exp_remove_mask = (exptable.NODE == 'exp_722') & (exptable.ENERGY > 23)  # Ponkratov U5(n,f) shape beyond 23 MeV
-exp_remove_mask |= (exptable.NODE == 'exp_874') & (exptable.ENERGY > 23)  # Ponkratov U8(n,f) shape beyond 23 MeV
-exp_remove_mask |= (exptable.NODE == 'exp_524') & (exptable.ENERGY > 27)  # A.D. Carlson PU5(n,f) above 27 MeV
-# remove due to recommendation in excel sheet
-exp_remove_mask |= (exptable.NODE == 'exp_8029')
-# remove Maslov's patch
-exp_remove_mask |= (exptable.NODE == 'exp_1003')
+energies = np.arange(1, 10)
+true_values = np.array([20] * len(energies), dtype=float)
+sys_unc = 0.1
+stat_unc = 0.01
+num_datasets = 2 
+sys_unc = rng.standard_normal(num_datasets) * sys_unc
+sys_err = [rng.standard_normal(1)*s for s in sys_unc] 
+sys_err = [-0.1, 0.1]
 
-exp_keep_idcs = np.where(~exp_remove_mask)[0]
-exptable = exptable.loc[exp_keep_idcs].reset_index(drop=True)
-expcov = csr_matrix(expcov.toarray()[np.ix_(exp_keep_idcs, exp_keep_idcs)])
-# variation-01 end
+expdata_list = []
+for expid in range(num_datasets):
+    expvalues = true_values.copy()
+    expvalues += true_values * rng.standard_normal(len(true_values)) * stat_unc
+    expvalues += true_values * sys_err[expid]
+    expdata = pd.DataFrame({
+        'NODE': f'exp_{expid}',
+        'REAC': 'MT:1-R1:1',
+        'ENERGY': energies,
+        'DATA': expvalues,
+        # correct: 'UNC': np.sqrt(stat_unc**2 + sys_unc**2), 
+        'UNC': stat_unc,
+        'DESCR': f'experiment {expid}'
+    })
+    expdata_list.append(expdata)
 
-# implement the recommendations of the excel sheet,
-# except the recommendation to convert the
-# Cance 1978 Pu9, U8, U5 absolute cross sections to ratios
-def replace_mt(node, old_mt, new_mt):
-    """Change the data type (given by MT) of a dataset."""
-    t = exptable.loc[exptable.NODE == node, 'REAC']
-    t = t.str.replace(rf'^MT:{old_mt}', f'MT:{new_mt}', regex=True)
-    exptable.loc[exptable.NODE == node, 'REAC'] = t
 
-replace_mt('exp_602', 3, 4)
-replace_mt('exp_685', 3, 4)
-replace_mt('exp_605', 3, 4)
-replace_mt('exp_666', 3, 4)
-replace_mt('exp_600', 3, 4)
-replace_mt('exp_608', 3, 4)
-replace_mt('exp_631', 3, 4)
-replace_mt('exp_1012', 3, 4)
-replace_mt('exp_6001', 4, 3)
-
+exptable = pd.concat(expdata_list)
+expcov = diags(np.square(exptable['UNC'].tolist()))
 
 # initialize the normalization errors
 priortable, priorcov = attach_shape_prior((priortable, exptable), covmat=priorcov, raise_if_exists=False)
@@ -95,17 +91,8 @@ initialize_shape_prior((priortable, exptable), compmap)
 priorvals = priortable.PRIOR.to_numpy()
 expvals = exptable.DATA.to_numpy()
 
-# speed up the pdf log_prob calculations exploiting the block diagonal structure
-expcov_list, idcs_tuples = create_datablock_covmat_list(db['datablock_list'], relative=True)
-# variation-01: remove certain points in datablocks
-for i in range(len(expcov_list)):
-    cur_idcs = np.arange(idcs_tuples[i][0], idcs_tuples[i][1]+1)
-    cur_idcs = cur_idcs[np.isin(cur_idcs, exp_keep_idcs)] - idcs_tuples[i][0]
-    expcov_list[i] = csr_matrix(expcov_list[i].toarray()[np.ix_(cur_idcs, cur_idcs)])
+expcov_list = [expcov]
 
-expcov_list = [x for x in expcov_list if x.shape != (0, 0)]
-
-# variation-01 end
 expchol_list = [tf.linalg.cholesky(x.toarray()) for x in expcov_list]
 expchol_op_list = [tf.linalg.LinearOperatorLowerTriangular(
         x, is_non_singular=True, is_square=True
@@ -141,30 +128,11 @@ expcov_linop = tf.linalg.LinearOperatorComposition(
 # MT:4-R1:9-R2:8 at 0, 1, 5, 15 (likely USU at
 
 usu_dfs = []
-usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:1-R1:8',), (5e-3, 1e-1, 1., 5., 15., 30.), (1e-2,)*6))
-usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:1-R1:9',), (5e-3, 1e-1, 1., 5., 15., 30.), (1e-2,)*6))
-usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:2-R1:8',), (1e-3, 1e-2, 1e-1, 1., 5., 15., 30.), (1e-2,)*7))
-usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:2-R1:9',), (1e-3, 1e-2, 1e-1, 1., 5., 15., 30.), (1e-2,)*7))
-usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:3-R1:10-R2:8',), (0.1, 1., 5., 15., 30., 100., 200.), (1e-2,)*7))
-usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:3-R1:9-R2:8',), (1e-3, 1e-2, 0.1, 1., 5., 15., 30., 60.), (1e-2,)*8))
-usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:4-R1:10-R2:8',), (0.1, 1., 5., 15., 30.), (1e-2,)*5))
-usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:4-R1:9-R2:8',), (1e-3, 1e-2, 1e-1, 1., 5., 15., 30.), (1e-2,)*7))
+usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:1-R1:1',), (1., 9.), (1e-2,)*2))
 usu_df = pd.concat(usu_dfs, ignore_index=True)
-
-# variation-01: remove usu treatment for specific datasets (after visual inspection of results)
-usu_df = usu_df[~(usu_df.NODE == 'endep_abs_usu_521')]
-usu_df = usu_df[~(usu_df.NODE == 'endep_abs_usu_1003')]
-usu_df = usu_df[~(usu_df.NODE == 'endep_abs_usu_1028')]
-# remove USU of NIFFTE TPC PU9/U5 fission measurement, believed to very accurate
-usu_df = usu_df[~(usu_df.NODE == 'endep_abs_usu_6001')]
-usu_df = usu_df[~(usu_df.NODE == 'endep_abs_usu_6002')]
-usu_df = usu_df.reset_index(drop=True)
-# variation-01: end
 
 usu_map = EnergyDependentAbsoluteUSUMap((usu_df, exptable), reduce=True)
 usu_jac = tf.sparse.to_dense(usu_map.jacobian(usu_df.PRIOR.to_numpy()))
-
-
 
 def create_like_cov_fun(usu_df, expcov_linop, Smat):
 
@@ -218,7 +186,8 @@ likelihood = MultivariateNormalLikelihoodWithCovParams(
 )
 
 # combine prior and likelihood into posterior
-post = UnnormalizedDistributionProduct([prior, likelihood])
+# post = UnnormalizedDistributionProduct([prior, likelihood])
+post = likelihood
 
 save_objects('output/01_model_preparation_output.pkl', locals(),
              'post', 'likelihood', 'priorvals', 'is_adj', 'usu_df', 'red_usu_df',
