@@ -130,73 +130,16 @@ expcov_linop = tf.linalg.LinearOperatorComposition(
     is_self_adjoint=True, is_positive_definite=True
 )
 
-# relevant USU error contributions
-# abs U5(n,f) at 1, 5, 15 MeV (clear USU around 2 MeV region)
-# abs PU9(n,f) at 1, 5 MeV (likely no USU but to be conservative)
-# shape U5(n,f) at 0, 1, 5, 15 MeV (likely USU in the low energy range (not thermal), at about 2 MeV nd at 15 MeV)
-# shape PU9(n,f) at 1, 5 MeV (likely USU at about 2 MeV)
-# MT:3-R1:10-R2:8 at 0, 1, 5, 15, 30, 100, 200
-# MT:3-R1:9-R2:8 at 0, 1, 5, 15, 30, 60
-# MT:4-R1:10-R2:8 at 1, 5 MeV (likely USU in 1-5 MeV range)
-# MT:4-R1:9-R2:8 at 0, 1, 5, 15 (likely USU at
 
-usu_dfs = []
-usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:1-R1:8',), (5e-3, 1e-1, 1., 5., 15., 30.), (1e-2,)*6))
-usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:1-R1:9',), (5e-3, 1e-1, 1., 5., 15., 30.), (1e-2,)*6))
-usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:2-R1:8',), (1e-3, 1e-2, 1e-1, 1., 5., 15., 30.), (1e-2,)*7))
-usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:2-R1:9',), (1e-3, 1e-2, 1e-1, 1., 5., 15., 30.), (1e-2,)*7))
-usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:3-R1:10-R2:8',), (0.1, 1., 5., 15., 30., 100., 200.), (1e-2,)*7))
-usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:3-R1:9-R2:8',), (1e-3, 1e-2, 0.1, 1., 5., 15., 30., 60.), (1e-2,)*8))
-usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:4-R1:10-R2:8',), (0.1, 1., 5., 15., 30.), (1e-2,)*5))
-usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:4-R1:9-R2:8',), (1e-3, 1e-2, 1e-1, 1., 5., 15., 30.), (1e-2,)*7))
-usu_df = pd.concat(usu_dfs, ignore_index=True)
+from mass_usu_model import (
+    get_mass_usu_sens,
+    create_like_cov_fun,
+)
 
-# variation-01: remove usu treatment for specific datasets (after visual inspection of results)
-usu_df = usu_df[~(usu_df.NODE == 'endep_abs_usu_521')]
-usu_df = usu_df[~(usu_df.NODE == 'endep_abs_usu_1003')]
-usu_df = usu_df[~(usu_df.NODE == 'endep_abs_usu_1028')]
-# remove USU of NIFFTE TPC PU9/U5 fission measurement, believed to very accurate
-usu_df = usu_df[~(usu_df.NODE == 'endep_abs_usu_6001')]
-usu_df = usu_df[~(usu_df.NODE == 'endep_abs_usu_6002')]
-usu_df = usu_df.reset_index(drop=True)
-# variation-01: end
-
-usu_map = EnergyDependentAbsoluteUSUMap((usu_df, exptable), reduce=True)
-usu_jac = tf.sparse.to_dense(usu_map.jacobian(usu_df.PRIOR.to_numpy()))
-
-
-
-def create_like_cov_fun(usu_df, expcov_linop, Smat):
-
-    def map_uncertainties(u):
-        ids = np.zeros((len(usu_df),), dtype=np.int32)
-        for index, row in red_usu_df.iterrows():
-            reac = row.REAC
-            energy = row.ENERGY
-            cur_idcs = usu_df.index[
-                (usu_df.REAC == reac) & (usu_df.ENERGY == energy)
-            ].to_numpy()
-            ids[cur_idcs] = index
-        # scatter the uncertainties to the appropriate places
-        tf_ids = tf.constant(ids, dtype=tf.int32)
-        uncs = tf.nn.embedding_lookup(u, tf_ids)
-        return uncs
-
-    def like_cov_fun(u):
-        uncs = map_uncertainties(u)
-        # covop = tf.linalg.LinearOperatorLowRankUpdate(
-        covop = tf.linalg.LinearOperatorLowRankUpdate(
-            expcov_linop, Smat, tf.square(uncs) + 1e-7,
-            is_self_adjoint=True, is_positive_definite=True,
-            is_diag_update_positive=True
-        )
-        return covop
-    red_usu_df = usu_df[['REAC', 'ENERGY']].drop_duplicates()
-    red_usu_df.sort_values(
-        ['REAC', 'ENERGY'], ascending=True, ignore_index=True, inplace=True
-    )
-    return like_cov_fun, red_usu_df
-
+usu_jac = get_mass_usu_sens(exptable.REAC.to_numpy()) 
+usu_df = pd.DataFrame({
+    'MATERIAL': ['U5', 'PU9', 'U10']
+})
 
 like_cov_fun, red_usu_df = create_like_cov_fun(usu_df, expcov_linop, usu_jac)
 num_covpars = len(red_usu_df)
