@@ -181,8 +181,6 @@ def create_like_cov_fun(usu_df, expcov_linop, Smat):
         return uncs
 
     def like_cov_fun(u):
-        # ad-hoc hack to see if we observe the expected uncertainty inflation
-        u = tf.constant([0.001, 0.001, 0.001], dtype=tf.float64)
         uncs = map_uncertainties(u)
         # covop = tf.linalg.LinearOperatorLowRankUpdate(
         covop = tf.linalg.LinearOperatorLowRankUpdate(
