@@ -22,7 +22,7 @@ def get_mass_usu_sens(exp_reacs):
                 row_idcs.append(i)
                 col_idcs.append(2)
                 vals.append(1.)
-        elif reac.startswith('MT:3-') or reac.startswith('MT:10-'):
+        if reac.startswith('MT:3-') or reac.startswith('MT:10-'):
             if 'R2:8' in reac:
                 row_idcs.append(i)
                 col_idcs.append(0)
