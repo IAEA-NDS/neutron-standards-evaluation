@@ -91,7 +91,8 @@ def add_normunc(covmat, idcs, unc):
 def calc_postcov2(
     S, expcov_rel, pred_exp, pred_prior,
     block_starts, block_stops, reg=1e-8,
-    idcs=None, exploit_structure=False
+    idcs=None, exploit_structure=False,
+    ret_abscov=False
 ):
     assert S.shape[0] == pred_exp.size
     assert S.shape[1] == pred_prior.size
@@ -123,8 +124,10 @@ def calc_postcov2(
         curinv = np.linalg.inv(curcov)
         A = curS.T @ curinv @ curS
     postcov = np.linalg.inv(A + regmat)
-    postcov /= pred_prior.reshape(-1,1) * pred_prior.reshape(1,-1) 
-    return postcov
+    postcov_rel = postcov / (pred_prior.reshape(-1,1) * pred_prior.reshape(1,-1))
+    if ret_abscov:
+        return postcov_rel, postcov
+    return postcov_rel
 
 
 def calc_postcov(
