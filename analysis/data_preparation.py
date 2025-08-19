@@ -1,0 +1,269 @@
+__all__ = [
+    'priortable',
+    'rpriortable',
+    'exptable',
+    'S',
+    'rS',
+    'Sblocks',
+    'expcov_abs',
+    'covmat_blocks',
+    'inv_covmat_blocks',
+    'block_starts',
+    'block_stops',
+]
+
+
+import re
+from scipy.sparse import coo_matrix, csr_matrix, diags
+import pandas as pd
+import tensorflow as tf
+from gmapy.data_management.database_IO import read_gma_database
+from gmapy.mappings.priortools import (
+    attach_shape_prior,
+    initialize_shape_prior,
+    remove_dummy_datasets
+)
+from gmapy.data_management.tablefuns import (
+    create_prior_table,
+    create_experiment_table,
+)
+from gmapy.data_management.uncfuns import (
+    create_experimental_covmat,
+    create_datablock_covmat_list,
+    create_prior_covmat
+)
+from gmapy.mappings.tf.compound_map_tf import CompoundMap as CompoundMapTF
+from gmapy.mappings.tf.restricted_map import RestrictedMap
+from gmapy.tf_uq.custom_distributions import (
+    MultivariateNormal,
+    MultivariateNormalLikelihoodWithCovParams,
+    DistributionForParameterSubset,
+    UnnormalizedDistributionProduct
+)
+from gmapy.data_management.object_utils import (
+    load_objects, save_objects
+)
+import numpy as np
+from scipy.sparse import block_diag, csr_matrix, identity, vstack
+from scipy.sparse.linalg import spsolve
+
+db_path = '../data/data.json'
+db = read_gma_database(db_path)
+remove_dummy_datasets(db['datablock_list'])
+
+priortable = create_prior_table(db['prior_list'])
+priorcov = create_prior_covmat(db['prior_list'])
+
+# prepare experimental quantities
+exptable = create_experiment_table(db['datablock_list'])
+expcov = create_experimental_covmat(db['datablock_list'], relative=True)
+exptable['UNC'] = np.sqrt(expcov.diagonal())
+
+# variation-01: remove specific experimental datasets after visual inspection
+exp_remove_mask = (exptable.NODE == 'exp_722') & (exptable.ENERGY > 23)  # Ponkratov U5(n,f) shape beyond 23 MeV
+exp_remove_mask |= (exptable.NODE == 'exp_874') & (exptable.ENERGY > 23)  # Ponkratov U8(n,f) shape beyond 23 MeV
+exp_remove_mask |= (exptable.NODE == 'exp_524') & (exptable.ENERGY > 27)  # A.D. Carlson PU5(n,f) above 27 MeV
+# remove due to recommendation in excel sheet
+exp_remove_mask |= (exptable.NODE == 'exp_8029')
+# remove Maslov's patch
+exp_remove_mask |= (exptable.NODE == 'exp_1003')
+
+exp_keep_idcs = np.where(~exp_remove_mask)[0]
+exptable = exptable.loc[exp_keep_idcs].reset_index(drop=True)
+expcov = csr_matrix(expcov.toarray()[np.ix_(exp_keep_idcs, exp_keep_idcs)])
+# variation-01 end
+
+# add missing normalization constants to NIFFTE TPC datasets 6001 and 6002 (absolute ratio)
+# exp_ids = [6001, 6002]
+# expcov = expcov.toarray()
+# for expid in exp_ids:
+#     expsel = exptable.NODE == f'exp_{expid}'
+#     expcov[np.ix_(expsel, expsel)] += np.square(0.01)
+
+expcov = csr_matrix(expcov)
+
+# implement the recommendations of the excel sheet,
+# except the recommendation to convert the
+# Cance 1978 Pu9, U8, U5 absolute cross sections to ratios
+def replace_mt(node, old_mt, new_mt):
+    """Change the data type (given by MT) of a dataset."""
+    t = exptable.loc[exptable.NODE == node, 'REAC']
+    t = t.str.replace(rf'^MT:{old_mt}', f'MT:{new_mt}', regex=True)
+    exptable.loc[exptable.NODE == node, 'REAC'] = t
+
+replace_mt('exp_602', 3, 4)
+replace_mt('exp_685', 3, 4)
+replace_mt('exp_605', 3, 4)
+replace_mt('exp_666', 3, 4)
+replace_mt('exp_600', 3, 4)
+replace_mt('exp_608', 3, 4)
+replace_mt('exp_631', 3, 4)
+replace_mt('exp_1012', 3, 4)
+replace_mt('exp_6001', 4, 3)
+
+# augment priortable with normalization factors from shape measurements
+priortable, priorcov = attach_shape_prior((priortable, exptable), covmat=priorcov, raise_if_exists=False)
+compmap = CompoundMapTF((priortable, exptable), reduce=True)
+initialize_shape_prior((priortable, exptable), compmap)
+
+# some convenient shortcuts
+priorvals = priortable.PRIOR.to_numpy()
+expvals = exptable.DATA.to_numpy()
+
+# speed up the pdf log_prob calculations exploiting the block diagonal structure
+expcov_list, idcs_tuples = create_datablock_covmat_list(db['datablock_list'], relative=True)
+# variation-01: remove certain points in datablocks
+for i in range(len(expcov_list)):
+    cur_idcs = np.arange(idcs_tuples[i][0], idcs_tuples[i][1]+1)
+    cur_idcs = cur_idcs[np.isin(cur_idcs, exp_keep_idcs)] - idcs_tuples[i][0]
+    expcov_list[i] = csr_matrix(expcov_list[i].toarray()[np.ix_(cur_idcs, cur_idcs)])
+
+expcov_list = [x for x in expcov_list if x.shape != (0, 0)]
+
+# variation-01 end
+expchol_list = [tf.linalg.cholesky(x.toarray()) for x in expcov_list]
+expchol_op_list = [tf.linalg.LinearOperatorLowerTriangular(
+        x, is_non_singular=True, is_square=True
+    ) for x in expchol_list]
+
+# generate a restricted mapping blending out the fixed parameters
+is_adj = priorcov.diagonal() != 0.
+adj_idcs = np.where(is_adj)[0]
+fixed_idcs = np.where(~is_adj)[0]
+restrimap = RestrictedMap(
+    len(priorvals), compmap.propagate, compmap.jacobian,
+    fixed_params=priorvals[fixed_idcs], fixed_params_idcs=fixed_idcs
+)
+propfun = tf.function(restrimap.propagate)
+jacfun = tf.function(restrimap.jacobian)
+
+# generate the experimental covariance matrix
+expcov_chol = tf.linalg.LinearOperatorBlockDiag(
+    expchol_op_list, is_non_singular=True, is_square=True)
+expcov_linop = tf.linalg.LinearOperatorComposition(
+    [expcov_chol, expcov_chol.adjoint()],
+    is_self_adjoint=True, is_positive_definite=True
+)
+
+# obtain a result
+optres, = load_objects(
+    '../output/f96d2f3/evaluation/output/02_parameter_optimization_output.pkl',
+    'optres'
+)
+
+assert len(priortable) - sum(priortable.NODE == 'fis') == len(optres.position)
+rrefvals = optres.position.numpy()
+refvals = priortable.PRIOR.to_numpy() 
+refvals[priortable.NODE != 'fis'] = rrefvals 
+priortable['PRED'] = refvals 
+
+# create the jacobian matrix 
+predvals = compmap.propagate(refvals).numpy()
+exptable['PRED'] = predvals
+S = compmap.jacobian(refvals)
+S = tf.sparse.to_dense(S)
+S = S.numpy()
+
+# compute absolute covariance matrix
+expcov_abs = expcov.toarray() * predvals.reshape(-1,1) * predvals.reshape(1,-1)
+expcov_abs = csr_matrix(expcov_abs)
+
+# drop fission spectrum and related sensitivities
+notfis_idcs = priortable.loc[priortable.NODE != 'fis'].index.to_numpy()
+rpriortable = priortable.loc[notfis_idcs].reset_index(drop=True)
+rS = csr_matrix(S[:, notfis_idcs])
+
+# obtain the covmat blocks to help segmenting the covariance matrix
+block_sizes = exptable.DB_IDX.value_counts().sort_index()
+block_stops = block_sizes.cumsum().to_numpy()
+block_starts = np.concatenate([[0], block_stops[:-1]])
+
+S_blocks = [rS[s:f,:] for s, f in zip(block_starts, block_stops)] 
+
+covmat_blocks = [expcov_abs[s:f,s:f].toarray() for s, f in zip(block_starts, block_stops)]
+inv_covmat_blocks = [np.linalg.inv(b) for b in covmat_blocks]
+
+# create USU sensmat
+def get_mass_usu_sens(exp_reacs):
+    row_idcs = []
+    col_idcs = []
+    vals = []
+    for i, reac in enumerate(exp_reacs):
+        if re.match('MT:([136]|10)-', reac):
+            if 'R1:8' in reac:
+                row_idcs.append(i)
+                col_idcs.append(0)
+                vals.append(1.)
+            elif 'R1:9' in reac:
+                row_idcs.append(i)
+                col_idcs.append(1)
+                vals.append(1.)
+            elif 'R1:10' in reac:
+                row_idcs.append(i)
+                col_idcs.append(2)
+                vals.append(1.)
+        if reac.startswith('MT:3-') or reac.startswith('MT:10-'):
+            if 'R2:8' in reac:
+                row_idcs.append(i)
+                col_idcs.append(0)
+                vals.append(-1.)
+            elif 'R2:9' in reac:
+                row_idcs.append(i)
+                col_idcs.append(1)
+                vals.append(-1.)
+            elif 'R2:10' in reac:
+                row_idcs.append(i)
+                col_idcs.append(2)
+                vals.append(-1.)
+    return coo_matrix((vals, (row_idcs, col_idcs))).toarray()
+
+
+# create likelihood function
+def create_like_cov_fun(usu_df, expcov_linop, Smat):
+
+    def map_uncertainties(u):
+        ids = np.zeros((len(usu_df),), dtype=np.int32)
+        for index, row in red_usu_df.iterrows():
+            material = row.MATERIAL
+            cur_idcs = usu_df.index[
+                (usu_df.MATERIAL == material)
+            ].to_numpy()
+            ids[cur_idcs] = index
+        # scatter the uncertainties to the appropriate places
+        tf_ids = tf.constant(ids, dtype=tf.int32)
+        uncs = tf.nn.embedding_lookup(u, tf_ids)
+        return uncs
+
+    def like_cov_fun(u):
+        uncs = map_uncertainties(u)
+        # covop = tf.linalg.LinearOperatorLowRankUpdate(
+        covop = tf.linalg.LinearOperatorLowRankUpdate(
+            expcov_linop, Smat, tf.square(uncs) + 1e-10,
+            is_self_adjoint=True, is_positive_definite=True,
+            is_diag_update_positive=True
+        )
+        return covop
+    red_usu_df = usu_df[['MATERIAL']].drop_duplicates()
+    red_usu_df.sort_values(
+        ['MATERIAL'], ascending=True, ignore_index=True, inplace=True
+    )
+    return like_cov_fun, red_usu_df
+
+
+usu_jac = get_mass_usu_sens(exptable.REAC.to_numpy()) 
+usu_df = pd.DataFrame({
+    'MATERIAL': ['U5', 'PU9', 'U10']
+})
+
+like_cov_fun, red_usu_df = create_like_cov_fun(usu_df, expcov_linop, usu_jac)
+num_covpars = len(red_usu_df)
+
+# generate the likelihood
+expvals = exptable.DATA.to_numpy()
+propfun = tf.function(restrimap.propagate)
+jacfun = tf.function(restrimap.jacobian)
+
+likelihood = MultivariateNormalLikelihoodWithCovParams(
+    len(adj_idcs), num_covpars, propfun, jacfun, expvals, like_cov_fun,
+    approximate_hessian=True, relative=True
+)
