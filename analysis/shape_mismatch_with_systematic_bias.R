@@ -1,8 +1,12 @@
 library(Matrix)
 
-x <- c(1, 1.01, 1.03, 1.05)
-y <- c(0.99, 1, 0.98, 1)
+x <- c(1.01, 0.99, 1.01, 0.99)
+y <- c(0.99, 1.01, 0.99, 1.01)
 z <- y / x
+
+######################################################################
+# Scenario 1: Introduce a systematic bias for each measurement type
+######################################################################
 
 S <- matrix(c(
   # row 1
@@ -33,3 +37,22 @@ B <- bdiag(chancov, chancov, chancov)
 B <- B + diag(rep(1e-10, nrow(B)))
 
 sqrt(diag(solve(t(S) %*% solve(B) %*% S)))
+
+######################################################################
+# Scenario 2: Introduce a systematic (energy-dependent) bias using
+#             Matern covariance matrix for each measurement type
+######################################################################
+
+matern_cov32 <- function(x, s, r) {
+  d <- abs(outer(x, x, `-`))
+  z1 <- 1 + sqrt(3) * d/r
+  z2 <- exp(-sqrt(3)*d/r)
+  covmat <- s^2 * z1 * z2
+}
+
+chancov <- matern_cov32(c(1,2,3,4), 0.01, 10)
+B <- bdiag(chancov, chancov, chancov)
+B <- B + diag(rep(1e-10, nrow(B)))
+
+sqrt(diag(solve(t(S) %*% solve(B) %*% S)))
+chancov
