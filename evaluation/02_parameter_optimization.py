@@ -16,7 +16,8 @@ post, likelihood, priorvals, is_adj, usu_df, red_usu_df, num_covpars = \
 neg_log_prob_and_gradient = tf.function(post.neg_log_prob_and_gradient)
 neg_log_post_hessian = post.neg_log_prob_hessian
 
-covpars = np.full(num_covpars, 0.007)
+# covpars = np.full(num_covpars, 0.007)
+covpars = np.array([0.007, 0.007, 0.001])
 refvals = likelihood.combine_pars(priorvals[is_adj], covpars)
 
 optres = determine_MAP_estimate(
