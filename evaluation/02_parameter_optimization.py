@@ -7,10 +7,10 @@ from gmapy.data_management.object_utils import (
     load_objects, save_objects
 )
 
-post, likelihood, priorvals, is_adj, usu_df, red_usu_df, num_covpars = \
+post, likelihood, priorvals, is_adj, num_covpars = \
     load_objects('output/01_model_preparation_output.pkl',
                  'post', 'likelihood', 'priorvals', 'is_adj',
-                 'usu_df', 'red_usu_df', 'num_covpars')
+                 'num_covpars')
 
 # speed it up!
 neg_log_prob_and_gradient = tf.function(post.neg_log_prob_and_gradient)
@@ -31,4 +31,4 @@ opt_neg_hessian = neg_log_post_hessian(optres.position)
 _, opt_neg_jac = neg_log_prob_and_gradient(optres.position)
 
 save_objects('output/02_parameter_optimization_output.pkl', locals(),
-             'optres', 'usu_df', 'red_usu_df', 'opt_neg_hessian', 'opt_neg_jac')
+             'optres', 'opt_neg_hessian', 'opt_neg_jac')
