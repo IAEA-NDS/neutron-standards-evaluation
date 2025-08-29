@@ -12,6 +12,7 @@ post, likelihood, priorvals, is_adj, num_covpars = \
                  'post', 'likelihood', 'priorvals', 'is_adj',
                  'num_covpars')
 
+
 # speed it up!
 neg_log_prob_and_gradient = tf.function(post.neg_log_prob_and_gradient)
 neg_log_post_hessian = post.neg_log_prob_hessian
@@ -30,5 +31,22 @@ refvals = optres.position
 opt_neg_hessian = neg_log_post_hessian(optres.position)
 _, opt_neg_jac = neg_log_prob_and_gradient(optres.position)
 
+# calculate covariance matrix according to cut posterior approach
+from cut_posterior_tools import cut_inference
+restrimap, exptable, expcov_cut_rel, = load_objects(
+    'output/01_model_preparation_output.pkl', 'restrimap', 'exptable', 'expcov_cut'
+)
+
+refvals_cut = optres.position.numpy()
+S_cut = tf.sparse.to_dense(restrimap.jacobian(refvals_cut)).numpy()
+predvals_cut = restrimap.propagate(refvals_cut).numpy()
+expvals_cut = exptable.DATA.to_numpy()
+expcov_cut = expcov_cut_rel * np.outer(predvals_cut, predvals_cut)
+cut_idcs = exptable.index[exptable.REAC.str.match('MT:6-')]
+postvals_cut, postcov_cut = cut_inference(
+    refvals_cut, S_cut, predvals_cut, expvals_cut, expcov_cut, cut_idcs=cut_idcs
+)
+
+
 save_objects('output/02_parameter_optimization_output.pkl', locals(),
-             'optres', 'opt_neg_hessian', 'opt_neg_jac')
+             'optres', 'opt_neg_hessian', 'opt_neg_jac', 'postvals_cut', 'postcov_cut')

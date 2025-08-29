@@ -51,8 +51,8 @@ priorcov = create_prior_covmat(db['prior_list'])
 
 # prepare experimental quantities
 subprocess.run(['python', '00_pure_sacs_eval.py'])
-exptable, expcov= load_objects(
-    'output/00_sacs_eval.pkl', 'exptable', 'expcov'
+exptable, expcov, expcov_cut = load_objects(
+    'output/00_sacs_eval.pkl', 'exptable', 'expcov', 'expcov_cut'
 )
 
 # variation-01: remove specific experimental datasets after visual inspection
@@ -67,6 +67,7 @@ exp_remove_mask |= (exptable.NODE == 'exp_1003')
 exp_keep_idcs = np.where(~exp_remove_mask)[0]
 exptable = exptable.loc[exp_keep_idcs].reset_index(drop=True)
 expcov = expcov[np.ix_(exp_keep_idcs, exp_keep_idcs)]
+expcov_cut = expcov_cut[np.ix_(exp_keep_idcs, exp_keep_idcs)]
 # variation-01 end
 
 # implement the recommendations of the excel sheet,
@@ -152,4 +153,8 @@ post = UnnormalizedDistributionProduct([prior, likelihood])
 
 save_objects('output/01_model_preparation_output.pkl', locals(),
              'post', 'likelihood', 'priorvals', 'is_adj',
-             'num_covpars', 'priortable', 'exptable', 'expcov', 'compmap', 'restrimap')
+             'num_covpars', 'priortable', 'exptable',
+             'expcov', 'expcov_cut', 'compmap', 'restrimap')
+
+
+
