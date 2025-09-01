@@ -1,7 +1,7 @@
 import numpy as np
 
 
-def cut_inference(refvals, S, predvals, expvals, expcov, cut_idcs=None, cut_unc=1e-8):
+def cut_inference(refvals, S, predvals, expvals, expcov, cut_idcs=None, cut_unc=1e-5):
     cut_idcs = [] if cut_idcs is None else cut_idcs
     refvals = refvals.reshape(-1, 1).copy()
     predvals = predvals.reshape(-1, 1).copy()
