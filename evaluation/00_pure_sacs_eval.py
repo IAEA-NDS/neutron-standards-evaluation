@@ -170,7 +170,7 @@ exptable_sacs2 = pd.DataFrame({
 
 exptable = pd.concat([exptable_nonsacs, exptable_sacs2], ignore_index=True)
 expcov_nonsacs = expcov[np.ix_(~sacs_mask, ~sacs_mask)]
-expcov = block_diag([expcov_nonsacs, 1e-12 * np.identity(3)]).toarray()
+expcov = block_diag([expcov_nonsacs, 1e-10 * np.identity(3)]).toarray()
 expcov_cut = block_diag([expcov_nonsacs, postcov_rel_sacs]).toarray()
 exptable.UNC = np.sqrt(np.diag(expcov))
 

@@ -23,8 +23,9 @@ refvals = priorvals[is_adj]
 # debug
 # calculate covariance matrix according to cut posterior approach
 from cut_posterior_tools import cut_inference
-restrimap, exptable, expcov_cut_rel, = load_objects(
-    'output/01_model_preparation_output.pkl', 'restrimap', 'exptable', 'expcov_cut'
+restrimap, exptable, expcov_cut_rel, cut_idcs, = load_objects(
+    'output/01_model_preparation_output.pkl', 'restrimap',
+    'exptable', 'expcov_cut', 'cut_idcs',
 )
 
 # debug start
@@ -33,7 +34,6 @@ S_cut = tf.sparse.to_dense(restrimap.jacobian(refvals_cut)).numpy()
 predvals_cut = restrimap.propagate(refvals_cut).numpy()
 expvals_cut = exptable.DATA.to_numpy()
 expcov_cut = expcov_cut_rel * np.outer(predvals_cut, predvals_cut)
-cut_idcs = exptable.index[exptable.REAC.str.match('MT:6-')]
 rpriortable = priortable.loc[is_adj].copy()
 postvals_cut_debug, postcov_cut_debug = cut_inference(refvals_cut, S_cut, predvals_cut, expvals_cut, expcov_cut, cut_idcs=cut_idcs)
 # debug stop
@@ -61,7 +61,6 @@ S_cut = tf.sparse.to_dense(restrimap.jacobian(refvals_cut)).numpy()
 predvals_cut = restrimap.propagate(refvals_cut).numpy()
 expvals_cut = exptable.DATA.to_numpy()
 expcov_cut = expcov_cut_rel * np.outer(predvals_cut, predvals_cut)
-cut_idcs = exptable.index[exptable.REAC.str.match('MT:6-')]
 postvals_cut, postcov_cut = cut_inference(
     refvals_cut, S_cut, predvals_cut, expvals_cut, expcov_cut, cut_idcs=cut_idcs
 )

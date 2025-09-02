@@ -55,6 +55,7 @@ exptable, expcov, expcov_cut = load_objects(
     'output/00_sacs_eval.pkl', 'exptable', 'expcov', 'expcov_cut'
 )
 
+
 # variation-01: remove specific experimental datasets after visual inspection
 exp_remove_mask = (exptable.NODE == 'exp_722') & (exptable.ENERGY > 23)  # Ponkratov U5(n,f) shape beyond 23 MeV
 exp_remove_mask |= (exptable.NODE == 'exp_874') & (exptable.ENERGY > 23)  # Ponkratov U8(n,f) shape beyond 23 MeV
@@ -69,6 +70,48 @@ exptable = exptable.loc[exp_keep_idcs].reset_index(drop=True)
 expcov = expcov[np.ix_(exp_keep_idcs, exp_keep_idcs)]
 expcov_cut = expcov_cut[np.ix_(exp_keep_idcs, exp_keep_idcs)]
 # variation-01 end
+
+# introduce cut posterior specs
+# MT:1-R1:1 # 6Li(n,t) no problem (6Li(n,n) and 6Li(n,t) correlated)
+sel1 = exptable.REAC == 'MT:1-R1:1'
+expcov[np.ix_(sel1, ~sel1)] = 0.
+expcov[np.ix_(~sel1, sel1)] = 0.
+expcov[np.ix_(sel1, sel1)] = np.identity(np.sum(sel1)) * 1e-10
+expcov_cut[np.ix_(sel1, sel1)] += np.square(0.005)
+
+# # MT:1-R1:2 # 6Li(n,n) no problem
+sel2 = exptable.REAC == 'MT:1-R1:2'
+expcov[np.ix_(sel2, ~sel2)] = 0.
+expcov[np.ix_(~sel2, sel2)] = 0.
+expcov[np.ix_(sel2, sel2)] = np.identity(np.sum(sel2)) * 1e-10
+expcov_cut[np.ix_(sel2, sel2)] += np.square(0.005)
+
+# # MT:1-R1:3 # 10B(n,a0) take only exp_2016
+sel3 = (exptable.REAC == 'MT:1-R1:3') & (exptable.NODE == 'exp_2016')
+expcov[np.ix_(sel3, ~sel3)] = 0.
+expcov[np.ix_(~sel3, sel3)] = 0.
+expcov[np.ix_(sel3, sel3)] = np.identity(np.sum(sel3)) * 1e-10
+expcov_cut[np.ix_(sel3, sel3)] += np.square(0.008)
+
+# # MT:1-R1:4 # 10B(n,a1) take only exp_2013
+sel4 = (exptable.REAC == 'MT:1-R1:4') & (exptable.NODE == 'exp_2013')
+expcov[np.ix_(sel4, ~sel4)] = 0.
+expcov[np.ix_(~sel4, sel4)] = 0.
+expcov[np.ix_(sel4, sel4)] = np.identity(np.sum(sel4)) * 1e-10
+expcov_cut[np.ix_(sel4, sel4)] +=  np.square(0.008)
+
+# # MT:1-R1:5 # 10B(n,n)  take only exp_2016
+sel5 = (exptable.REAC == 'MT:1-R1:5') & (exptable.NODE == 'exp_2016')
+expcov[np.ix_(sel5, ~sel5)] = 0.
+expcov[np.ix_(~sel5, sel5)] = 0.
+expcov[np.ix_(sel5, sel5)] = np.identity(np.sum(sel5)) * 1e-10
+expcov_cut[np.ix_(sel5, sel5)] += np.square(0.008)
+
+# also store the SACS cut idcs
+sel6 = exptable.REAC.str.match('MT:6-')
+
+cut_sel = sel1 | sel2 | sel3 | sel4 | sel5 | sel6
+cut_idcs = exptable.index[cut_sel]
 
 # implement the recommendations of the excel sheet,
 # except the recommendation to convert the
@@ -154,7 +197,4 @@ post = UnnormalizedDistributionProduct([prior, likelihood])
 save_objects('output/01_model_preparation_output.pkl', locals(),
              'post', 'likelihood', 'priorvals', 'is_adj',
              'num_covpars', 'priortable', 'exptable',
-             'expcov', 'expcov_cut', 'compmap', 'restrimap')
-
-
-
+             'expcov', 'expcov_cut', 'compmap', 'restrimap', 'cut_idcs')
