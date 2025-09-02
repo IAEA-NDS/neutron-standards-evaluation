@@ -40,7 +40,7 @@ postvals_cut_debug, postcov_cut_debug = cut_inference(refvals_cut, S_cut, predva
 
 optres = determine_MAP_estimate(
     refvals, neg_log_prob_and_gradient,
-    neg_log_post_hessian, max_inner_iters=500, max_outer_iters=50, nugget=1e-3,
+    neg_log_post_hessian, max_inner_iters=500, max_outer_iters=100, nugget=1e-8,
     ret_optres=True, must_converge=True
 )
 
