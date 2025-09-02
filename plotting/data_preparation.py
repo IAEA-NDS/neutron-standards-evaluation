@@ -94,10 +94,19 @@ def prepare_result_data(git_hash, usu_info=False, extra_info=False):
     red_priortable = priortable.loc[is_adj, :].reset_index(drop=True)
 
     # calculate inverse hessian (posterior covariance matrix)
-    post, = load_objects(f'{curcalc}/01_model_preparation_output.pkl', 'post')
-    post_hess = post.neg_log_prob_hessian(optres.position).numpy()
-    post_cov = np.linalg.inv(post_hess)
-    post_cov_restr = post_cov[np.ix_(*([np.arange(len(red_priortable))]*2))]
+    try:
+        print('using cut posterior...')
+        post_cov_restr, = load_objects(f'{curcalc}/02_parameter_optimization_output.pkl', 'postcov_cut')
+        is_cut_posterior = True
+    except:
+        print('using normal Bayesian posterior...')
+        is_cut_posterior = False
+
+    if not is_cut_posterior:
+        post, = load_objects(f'{curcalc}/01_model_preparation_output.pkl', 'post')
+        post_hess = post.neg_log_prob_hessian(optres.position).numpy()
+        post_cov = np.linalg.inv(post_hess)
+        post_cov_restr = post_cov[np.ix_(*([np.arange(len(red_priortable))]*2))]
 
     # augment priortable with results
     red_priortable['POST'] = np.mean(chain[:, :len(red_priortable)], axis=0)
