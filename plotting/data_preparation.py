@@ -75,6 +75,47 @@ def load_evaluation(git_hash, label, color, style):
     }
 
 
+def check_normalization(propmap, priortable, exptable):
+    priortable = priortable.copy()
+    exptable = exptable.copy()
+
+    mod_priortable = priortable.copy()
+    mod_priortable.loc[mod_priortable.NODE.str.match('norm_'), 'OPT'] = 1.
+
+    propvals = propmap.propagate(priortable['OPT']).numpy()
+    propvals_notnorm = propmap.propagate(mod_priortable['OPT']).numpy()
+    exptable['PROP'] = propvals
+    exptable['PROP_NOTNORM'] = propvals_notnorm
+
+    opt_norm_series = priortable.loc[priortable.NODE.str.match('norm_'), ['NODE', 'OPT']].copy()
+    opt_norm_series['NODE'] = opt_norm_series['NODE'].str.replace('norm_', 'exp_')
+    opt_norm_series = opt_norm_series.set_index('NODE')['OPT']
+
+    red_exptable = exptable[exptable.REAC.str.match('MT:(2|4|8)-')].copy()
+    real_norm_series = red_exptable.groupby('NODE').apply(lambda group: np.mean(group['DATA'] / group['PROP_NOTNORM']))
+
+    exptable['NORM_OPT'] = 1.
+    exptable['NORM_REAL'] = 1.
+    exptable['NORM_OPT'] = exptable['NODE'].map(opt_norm_series)
+    exptable['NORM_REAL'] = exptable['NODE'].map(real_norm_series)
+
+    exptable['RSCL_PROP_OPT'] = exptable['PROP_NOTNORM'] * exptable['NORM_OPT']
+    exptable['RSCL_PROP_REAL'] = exptable['PROP'] * exptable['NORM_REAL']
+    exptable['DIFF_OPT'] = exptable['DATA'] - exptable['RSCL_PROP_OPT']
+    exptable['DIFF_REAL'] = exptable['DATA'] - exptable['RSCL_PROP_REAL']
+
+    mean_diff_opt = exptable.groupby('NODE').apply(lambda group: np.mean(group['DIFF_OPT'] / group['UNC']))
+    mean_diff_real = exptable.groupby('NODE').apply(lambda group: np.mean(group['DIFF_REAL'] / group['UNC']))
+
+    real_norm_series.index = real_norm_series.index.str.replace('exp_', 'norm_')
+    priortable['REAL_NORM'] = np.nan
+    priortable['REAL_NORM'] = priortable['NODE'].map(real_norm_series)
+
+    breakpoint()
+
+    print(priortable.loc[priortable.NODE.str.match('norm_'), ['NODE', 'OPT', 'REAL_NORM']])
+
+
 @mem.cache
 def prepare_result_data(git_hash, usu_info=False, extra_info=False):
     curcalc = f'../output/{git_hash}/evaluation/output'
@@ -102,7 +143,7 @@ def prepare_result_data(git_hash, usu_info=False, extra_info=False):
         print('using normal Bayesian posterior...')
         is_cut_posterior = False
 
-    if not is_cut_posterior:
+    if not is_cut_posterior and False:  # False for debugging
         post, = load_objects(f'{curcalc}/01_model_preparation_output.pkl', 'post')
         post_hess = post.neg_log_prob_hessian(optres.position).numpy()
         post_cov = np.linalg.inv(post_hess)
@@ -116,6 +157,9 @@ def prepare_result_data(git_hash, usu_info=False, extra_info=False):
     priortable.loc[is_adj, 'POST'] = np.array(red_priortable['POST'])
     priortable.loc[is_adj, 'POSTUNC'] = np.array(red_priortable['POSTUNC'])
     priortable.loc[is_adj, 'OPT'] = np.array(red_priortable['OPT'])
+
+    # check normalization factors
+    check_normalization(restrimap, red_priortable, exptable)
 
     # add column where uncertainties are inflated by USU components
     # as they are used/determined in the evaluation
