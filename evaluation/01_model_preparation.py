@@ -130,6 +130,9 @@ expcov_linop = tf.linalg.LinearOperatorComposition(
     is_self_adjoint=True, is_positive_definite=True
 )
 
+# Inserted to check proper normalization of shape data
+expcov = expcov_linop.to_dense().numpy()
+
 # relevant USU error contributions
 # abs U5(n,f) at 1, 5, 15 MeV (clear USU around 2 MeV region)
 # abs PU9(n,f) at 1, 5 MeV (likely no USU but to be conservative)
