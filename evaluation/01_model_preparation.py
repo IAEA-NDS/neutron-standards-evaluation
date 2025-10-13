@@ -130,7 +130,7 @@ for node in nodes:
     if not re.match('MT:(2|4|8|9)-', reacstr):
         continue  # skip if not shape data
     print(f'remove normalization uncertainty from {node} with reaction {reacstr}')
-    expcov = remove_normalization_uncertainty(expcov, idcs, idstr=node)
+    expcov = remove_normalization_uncertainty(expcov, idcs, idstr=node, reg=1e-4)
 
 
 # speed up the pdf log_prob calculations exploiting the block diagonal structure
