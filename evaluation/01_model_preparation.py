@@ -1,6 +1,6 @@
 import re
 import pandas as pd
-from scipy.sparse import block_diag, csr_matrix
+from scipy.sparse import block_diag, csr_matrix, identity
 import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
@@ -83,11 +83,55 @@ replace_mt('exp_631', 3, 4)
 replace_mt('exp_1012', 3, 4)
 replace_mt('exp_6001', 4, 3)
 
+import time
+
+
+def remove_normalization_uncertainty(expcov, idcs, reg=1e-5, idstr=''):
+    """Remove systematic uncertainty component from covariance matrix."""
+    # generate a vector of unit length corresponding to a normalization factor
+    unnorm_sysvec = np.zeros((expcov.shape[0], 1), dtype=float)
+    unnorm_sysvec[idcs] = 1.0
+
+    unnorm_sysvec_length = np.sqrt(np.sum(np.square(unnorm_sysvec)))
+    sysvec = unnorm_sysvec / unnorm_sysvec_length
+
+    # just for checking: calculate magnitude of systematic uncertainty
+    sysvar = (sysvec.T @ expcov @ sysvec).item()
+    unnorm_sysvar = sysvar / np.square(unnorm_sysvec_length)
+    unnorm_sysunc = np.sqrt(unnorm_sysvar)
+    print(f'---> Systematic uncertainty of {idstr} is {unnorm_sysunc*100:.2f}%')
+
+    # generate a projector that removes the systematic direction
+    idmat = identity(expcov.shape[0], dtype=float)
+    proj = idmat - csr_matrix(sysvec) @ csr_matrix(sysvec.T)
+
+    # apply the projector left and right on Liso experimental covariance matrix
+    correct_expcov = (proj.T) @ expcov @ proj
+
+    # assert that the operation had the intended effect
+    assert np.allclose(sysvec.T @ correct_expcov @ sysvec, 0.)
+
+    # but now we have a rank deficient matrix because we remove the "systemtic direction"
+    # add a small systematic uncertainty re-gain positive definiteness
+    correct_expcov += (reg*reg) * csr_matrix(sysvec) @ csr_matrix(sysvec.T)
+
+    return correct_expcov
 
 
 # remove requested indices from exptable and covariance matrix
 exptable = exptable.loc[exp_keep_idcs].reset_index(drop=True)
 expcov = csr_matrix(expcov.toarray()[np.ix_(exp_keep_idcs, exp_keep_idcs)])
+
+# remove systematic uncertainty component
+nodes = np.unique(exptable['NODE'])
+for node in nodes:
+    idcs = exptable.loc[exptable.NODE == node].index
+    reacstr = exptable.at[idcs[0], 'REAC']
+    if not re.match('MT:(2|4|8|9)-', reacstr):
+        continue  # skip if not shape data
+    print(f'remove normalization uncertainty from {node} with reaction {reacstr}')
+    expcov = remove_normalization_uncertainty(expcov, idcs, idstr=node)
+
 
 # speed up the pdf log_prob calculations exploiting the block diagonal structure
 block_lens = exptable['DB_IDX'].value_counts().sort_index().to_numpy()
