@@ -49,7 +49,7 @@ priorcov = create_prior_covmat(db['prior_list'])
 
 # prepare experimental quantities
 exptable = create_experiment_table(db['datablock_list'])
-expcov = create_experimental_covmat(db['datablock_list'])
+expcov = create_experimental_covmat(db['datablock_list'], relative=True)
 exptable['UNC'] = np.sqrt(expcov.diagonal())
 
 # variation-01: remove specific experimental datasets after visual inspection
@@ -62,8 +62,6 @@ exp_remove_mask |= (exptable.NODE == 'exp_8029')
 exp_remove_mask |= (exptable.NODE == 'exp_1003')
 
 exp_keep_idcs = np.where(~exp_remove_mask)[0]
-exptable = exptable.loc[exp_keep_idcs].reset_index(drop=True)
-expcov = csr_matrix(expcov.toarray()[np.ix_(exp_keep_idcs, exp_keep_idcs)])
 # variation-01 end
 
 # implement the recommendations of the excel sheet,
@@ -86,6 +84,29 @@ replace_mt('exp_1012', 3, 4)
 replace_mt('exp_6001', 4, 3)
 
 
+
+# remove requested indices from exptable and covariance matrix
+exptable = exptable.loc[exp_keep_idcs].reset_index(drop=True)
+expcov = csr_matrix(expcov.toarray()[np.ix_(exp_keep_idcs, exp_keep_idcs)])
+
+# speed up the pdf log_prob calculations exploiting the block diagonal structure
+block_lens = exptable['DB_IDX'].value_counts().sort_index().to_numpy()
+block_stops = np.cumsum(block_lens)
+block_starts = np.concatenate([[0], block_stops[:-1]], axis=0)
+
+# variation-01: remove certain points in datablocks
+expcov_list = []
+for i, (sta, sto) in enumerate(zip(block_starts, block_stops)):
+    curmat = csr_matrix(expcov[sta:sto, sta:sto])
+    if curmat.shape != (0, 0):
+        expcov_list.append(curmat)
+
+# variation-01 end
+expchol_list = [tf.linalg.cholesky(x.toarray()) for x in expcov_list]
+expchol_op_list = [tf.linalg.LinearOperatorLowerTriangular(
+        x, is_non_singular=True, is_square=True
+    ) for x in expchol_list]
+
 # initialize the normalization errors
 priortable, priorcov = attach_shape_prior((priortable, exptable), covmat=priorcov, raise_if_exists=False)
 compmap = CompoundMapTF((priortable, exptable), reduce=True)
@@ -94,22 +115,6 @@ initialize_shape_prior((priortable, exptable), compmap)
 # some convenient shortcuts
 priorvals = priortable.PRIOR.to_numpy()
 expvals = exptable.DATA.to_numpy()
-
-# speed up the pdf log_prob calculations exploiting the block diagonal structure
-expcov_list, idcs_tuples = create_datablock_covmat_list(db['datablock_list'], relative=True)
-# variation-01: remove certain points in datablocks
-for i in range(len(expcov_list)):
-    cur_idcs = np.arange(idcs_tuples[i][0], idcs_tuples[i][1]+1)
-    cur_idcs = cur_idcs[np.isin(cur_idcs, exp_keep_idcs)] - idcs_tuples[i][0]
-    expcov_list[i] = csr_matrix(expcov_list[i].toarray()[np.ix_(cur_idcs, cur_idcs)])
-
-expcov_list = [x for x in expcov_list if x.shape != (0, 0)]
-
-# variation-01 end
-expchol_list = [tf.linalg.cholesky(x.toarray()) for x in expcov_list]
-expchol_op_list = [tf.linalg.LinearOperatorLowerTriangular(
-        x, is_non_singular=True, is_square=True
-    ) for x in expchol_list]
 
 # generate a restricted mapping blending out the fixed parameters
 is_adj = priorcov.diagonal() != 0.
