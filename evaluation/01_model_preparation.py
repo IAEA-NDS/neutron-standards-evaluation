@@ -40,7 +40,7 @@ tfd = tfp.distributions
 tfb = tfp.bijectors
 
 # retrieve prior estimates and covariances from the database
-db_path = '../data/data.json'
+db_path = '../data/data2017.json'
 db = read_gma_database(db_path)
 remove_dummy_datasets(db['datablock_list'])
 
@@ -53,36 +53,10 @@ expcov = create_experimental_covmat(db['datablock_list'], relative=True)
 exptable['UNC'] = np.sqrt(expcov.diagonal())
 
 # variation-01: remove specific experimental datasets after visual inspection
-exp_remove_mask = (exptable.NODE == 'exp_722') & (exptable.ENERGY > 23)  # Ponkratov U5(n,f) shape beyond 23 MeV
-exp_remove_mask |= (exptable.NODE == 'exp_874') & (exptable.ENERGY > 23)  # Ponkratov U8(n,f) shape beyond 23 MeV
-exp_remove_mask |= (exptable.NODE == 'exp_524') & (exptable.ENERGY > 27)  # A.D. Carlson PU5(n,f) above 27 MeV
-# remove due to recommendation in excel sheet
-exp_remove_mask |= (exptable.NODE == 'exp_8029')
-# remove Maslov's patch
-exp_remove_mask |= (exptable.NODE == 'exp_1003')
+exp_remove_mask = np.zeros(len(exptable), dtype=bool)
 
 exp_keep_idcs = np.where(~exp_remove_mask)[0]
 # variation-01 end
-
-# implement the recommendations of the excel sheet,
-# except the recommendation to convert the
-# Cance 1978 Pu9, U8, U5 absolute cross sections to ratios
-def replace_mt(node, old_mt, new_mt):
-    """Change the data type (given by MT) of a dataset."""
-    t = exptable.loc[exptable.NODE == node, 'REAC']
-    t = t.str.replace(rf'^MT:{old_mt}', f'MT:{new_mt}', regex=True)
-    exptable.loc[exptable.NODE == node, 'REAC'] = t
-
-replace_mt('exp_602', 3, 4)
-replace_mt('exp_685', 3, 4)
-replace_mt('exp_605', 3, 4)
-replace_mt('exp_666', 3, 4)
-replace_mt('exp_600', 3, 4)
-replace_mt('exp_608', 3, 4)
-replace_mt('exp_631', 3, 4)
-replace_mt('exp_1012', 3, 4)
-replace_mt('exp_6001', 4, 3)
-
 
 
 # remove requested indices from exptable and covariance matrix
