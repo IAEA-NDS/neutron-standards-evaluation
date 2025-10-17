@@ -75,7 +75,23 @@ def load_evaluation(git_hash, label, color, style):
     }
 
 
-def check_normalization(propmap, priortable, exptable, expcov):
+def calc_chisquare_and_logprob(propmap, priortable, exptable, expcov, likelihood, expnr, adj ):
+    priortable = priortable.copy()
+    exptable = exptable.copy()
+    priortable.loc[priortable.NODE == f'norm_{expnr}', 'OPT'] += adj
+    propvals = propmap.propagate(priortable['OPT']).numpy()
+    exptable['PROP'] = propvals
+    rx = exptable[exptable.NODE == f'exp_{expnr}']
+    rcov = expcov[np.ix_(rx.index, rx.index)]
+    px = rx['PROP'].to_numpy().reshape(-1,1)
+    ux = (rx['DATA'] - rx['PROP']).to_numpy().reshape(-1,1)
+    abscov = rcov * (px @ px.T)
+    chisquare = np.squeeze(ux.T @ np.linalg.inv(abscov) @ ux)
+    loglike = likelihood.log_prob(priortable['OPT'].to_numpy())
+    return chisquare, loglike
+
+
+def check_normalization(propmap, priortable, exptable, expcov, post, likelihood):
     priortable = priortable.copy()
     exptable = exptable.copy()
 
@@ -83,21 +99,41 @@ def check_normalization(propmap, priortable, exptable, expcov):
     exptable['PROP'] = propvals
 
     red_exptable = exptable[exptable.REAC.str.match('MT:(2|4|8)-')].copy()
-    real_norm_series = red_exptable.groupby('NODE').apply(lambda group: np.mean(group['DATA'] / group['PROP']))
 
-    pd.set_option('display.max_rows', None)
-    print(real_norm_series)
-    pass
-    breakpoint()
+    # take exp_875 as example to check normalization factor (difference between logprob and chisquare, correlated datasets)
+    # take exp_881 as example to check normalization factor
+    expnr = '881'
+    best_chisquare, best_logprob = calc_chisquare_and_logprob(propmap, priortable, exptable, expcov, likelihood, expnr, 0.0)
+    up_chisquare, up_logprob = calc_chisquare_and_logprob(propmap, priortable, exptable, expcov, likelihood, expnr, 0.001)
+    down_chisquare, down_logprob = calc_chisquare_and_logprob(propmap, priortable, exptable, expcov, likelihood, expnr, -0.005)
+    # assertions only hold if dataset is not correlated to other datasets
+    assert np.isclose(best_chisquare - up_chisquare, -2*(best_logprob - up_logprob))
+    assert np.isclose(best_chisquare - down_chisquare, -2*(best_logprob - down_logprob))
+    print(f'best chisquare: {best_chisquare} --- best logprob: {best_logprob}')
+    print(f'up chisquare: {up_chisquare} --- up logprob: {up_logprob}')
+    print(f'down chisquare: {down_chisquare} --- down logprob {down_logprob}')
+
+    # cycle through all normalizations and ensure they yield the maximal log-posterior-pdf value
+    norm_labels = priortable.loc[priortable.NODE.str.match('norm_'), 'NODE'].copy()
+    expnums = norm_labels.str.replace('norm_', '')
+    for expnum in expnums:
+        print(f'check if logprob really best for {expnum}')
+        curchi1, curlogprob1 = calc_chisquare_and_logprob(propmap, priortable, exptable, expcov, likelihood, expnum, 0.001)
+        curchi2, curlogprob2 = calc_chisquare_and_logprob(propmap, priortable, exptable, expcov, likelihood, expnum, -0.001)
+        assert curlogprob1 < best_logprob
+        assert curlogprob2 < best_logprob
+
+    import sys
+    sys.exit()
 
 
 @mem.cache
 def prepare_result_data(git_hash, usu_info=False, extra_info=False):
     curcalc = f'../output/{git_hash}/evaluation/output'
-    priortable, is_adj, exptable, restrimap, expcov = \
+    priortable, is_adj, exptable, restrimap, expcov, post, likelihood = \
         load_objects(f'{curcalc}/01_model_preparation_output.pkl',
                      'priortable', 'is_adj',
-                     'exptable', 'restrimap', 'expcov')
+                     'exptable', 'restrimap', 'expcov', 'post', 'likelihood')
 
     if usu_info:
         usu_df, = load_objects(
@@ -134,7 +170,7 @@ def prepare_result_data(git_hash, usu_info=False, extra_info=False):
     priortable.loc[is_adj, 'OPT'] = np.array(red_priortable['OPT'])
 
     # check normalization factors
-    check_normalization(restrimap, red_priortable, exptable, expcov)
+    check_normalization(restrimap, red_priortable, exptable, expcov, post, likelihood)
 
     # add column where uncertainties are inflated by USU components
     # as they are used/determined in the evaluation
