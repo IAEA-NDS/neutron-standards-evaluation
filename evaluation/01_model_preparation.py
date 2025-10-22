@@ -31,7 +31,8 @@ from gmapy.mappings.tf.energy_dependent_absolute_usu_map_tf import (
 )
 from gmapy.tf_uq.custom_distributions import (
     MultivariateNormal,
-    MultivariateNormalLikelihood,
+    # MultivariateNormalLikelihood,
+    ChiSquarePseudoDist,
     DistributionForParameterSubset,
     UnnormalizedDistributionProduct
 )
@@ -213,7 +214,7 @@ prior = DistributionForParameterSubset(
     prior_red, len(adj_idcs), is_adj_constr_idcs
 )
 
-likelihood = MultivariateNormalLikelihood(
+likelihood = ChiSquarePseudoDist(
     len(adj_idcs), propfun, jacfun, expvals, expcov_chol, approximate_hessian=True, relative=True
 )
 
