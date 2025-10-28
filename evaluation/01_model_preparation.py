@@ -40,7 +40,7 @@ tfd = tfp.distributions
 tfb = tfp.bijectors
 
 # retrieve prior estimates and covariances from the database
-db_path = '../data/data2017.gma'
+db_path = '../data/data.json'
 db = read_gma_database(db_path)
 remove_dummy_datasets(db['datablock_list'])
 
