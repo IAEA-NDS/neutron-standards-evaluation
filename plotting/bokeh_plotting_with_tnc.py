@@ -382,24 +382,3 @@ layout = Tabs(tabs=super_panel_groups)
 # save to ile
 
 save(layout, filename='testplot.html', title='Plots', template="basic.html", resources="inline")
-
-
-# create CSV files
-
-exptable_out = dt_list[-1].copy()
-exptable_out['REAC_HUMAN'] = [get_human_readable_reaction_string(x, ref_priortable) for x in exptable_out['REAC']]
-exptable_out.to_excel('exptable_4610454.xlsx')
-
-dt_list[0].to_excel('eval_4610454.xlsx')
-
-x = pred_list[0]['exptable']
-x[x.NODE=='exp_8008']
-
-
-
-
-
-
-
-
-
