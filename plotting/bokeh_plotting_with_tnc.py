@@ -1,5 +1,7 @@
 import re
 import os
+from glob import glob
+from pathlib import Path
 from bokeh.palettes import Category20_20
 from bokeh.plotting import figure, show, save, curdoc
 from bokeh.models import (
@@ -37,11 +39,11 @@ from data_preparation import (
 )
 
 # only used for renormalization
-dfs = prepare_result_data('4610454')
+dfs = prepare_result_data('5f0219f')
 exptable = dfs['exptable']
 
 # reference cross section
-dfs = prepare_result_data('ea40e40')
+dfs = prepare_result_data('5f0219f')
 ref_priortable = dfs['priortable'].copy()
 std2017 = dfs['std2017_dt']
 
@@ -50,12 +52,12 @@ pred_list = []
 cols = []
 # pred_list.append(load_evaluation('01a02a0', '8007 removed', 'green', 'dotdash'))
 # pred_list.append(load_evaluation('f42e55d', '1013 to shape', 'blue', 'dotdash'))
-# pred_list.append(load_evaluation('1e8ce5e', 'recommend_new MCMC', 'orange', 'dashed'))
-# cols.append("PRED")
-pred_list.append(load_evaluation('4610454', 'latest (maxlike)', 'green', 'solid'))
+pred_list.append(load_evaluation('41fea6d', 'SACS paper (maxlike)', 'orange', 'dashed'))
 cols.append("MAXLIKE")
-pred_list.append(load_evaluation('4610454', 'latest (MCMC)  (maxlike)', 'brown', 'dotdash'))
-cols.append("PRED")
+# pred_list.append(load_evaluation('5f0219f', 'latest (maxlike)', 'green', 'solid'))
+# cols.append("MAXLIKE")
+pred_list.append(load_evaluation('5f0219f', 'SACS paper (chisquare)', 'brown', 'dotdash'))
+cols.append("MAXLIKE")
 # pred_list.append(load_evaluation('6b9ab72', 'latest with red 3', 'blue', 'dotdash'))
 # cols.append("MAXLIKE")
 # pred_list.append(load_evaluation('55c975c', 'liso_abs', 'black', 'solid'))
@@ -106,6 +108,30 @@ pred_list.append(
     }
 )
 cols.append("PRED")
+
+
+# load the SACS paper results
+data_dir = Path("Path to neutron-standards-database/results")
+glob_pattern = "result_MT-*.csv"
+sacs_paper_df = pd.concat(
+    (pd.read_csv(f).assign(REAC=f.name) for f in data_dir.glob(glob_pattern)),
+    ignore_index=True
+)
+sacs_paper_df['REAC'] = sacs_paper_df.REAC.str.replace('^.*MT-([0-9]+)-R1-([0-9]+).*', r'MT:\1-R1:\2', regex=True)
+sacs_paper_df = sacs_paper_df[sacs_paper_df.REAC.str.match('MT:1-')].reset_index(drop=True)
+
+sacs_paper_df.rename(columns={'POST': 'PRED'}, inplace=True)
+sacs_paper_df.drop(columns=['RELPOSTUNC', 'POSTUNC'], inplace=True)
+pred_list.append(
+    {
+        'git_hash': None,
+        'pred_dt': sacs_paper_df,
+        'label': 'SACS paper (sloppy FGLS)',
+        'color': 'green',
+        'style': 'solid'
+    }
+)
+cols.append('PRED')
 
 # interpolate STD2017 to energies of experiments and predictions
 dt_list = [v['pred_dt'] for v in pred_list]
