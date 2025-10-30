@@ -36,7 +36,7 @@ for i in range(num_iters):
     propvals = propfun(curvals).numpy()
     S = tf.sparse.to_dense(jacfun(curvals)).numpy()
     expcov_abs = expcov * (propvals.reshape(-1,1) * propvals.reshape(1,-1))
-    inv_postcov = S.T @ solve(expcov, S)
+    inv_postcov = S.T @ solve(expcov_abs, S)
     d = expvals.reshape(-1,1) - propvals.reshape(-1,1)
     rhs = S.T @ solve(expcov_abs, d)
     delta = solve(inv_postcov, rhs).flatten()
