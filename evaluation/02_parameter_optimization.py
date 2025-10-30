@@ -26,6 +26,7 @@ jacfun = tf.function(restrimap.jacobian)
 
 num_iters = 50
 tol = 1e-8
+damp_unc = 5  # 500% damping uncertainty
 solve = np.linalg.solve
 
 newvals = refvals.copy()
@@ -37,9 +38,13 @@ for i in range(num_iters):
     S = tf.sparse.to_dense(jacfun(curvals)).numpy()
     expcov_abs = expcov * (propvals.reshape(-1,1) * propvals.reshape(1,-1))
     inv_postcov = S.T @ solve(expcov, S)
+    # poor-man LM algorithm: constant damping term
+    damp_abs = 1/np.square(damp_unc) * np.diag(1/(curvals**2))
+    inv_postcov_reg = inv_postcov + damp_abs
+
     d = expvals.reshape(-1,1) - propvals.reshape(-1,1)
     rhs = S.T @ solve(expcov_abs, d)
-    delta = solve(inv_postcov, rhs).flatten()
+    delta = solve(inv_postcov_reg, rhs).flatten()
     newvals = curvals + delta
 
     relative_change = np.linalg.norm(delta) / np.linalg.norm(curvals)
