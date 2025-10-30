@@ -7,22 +7,56 @@ from gmapy.data_management.object_utils import (
     load_objects, save_objects
 )
 
-post, likelihood, priorvals, is_adj, usu_df, red_usu_df, num_covpars = \
+post, restrimap, exptable, expcov, priorvals, is_adj, usu_df, red_usu_df, num_covpars = \
     load_objects('output/01_model_preparation_output.pkl',
-                 'post', 'likelihood', 'priorvals', 'is_adj',
-                 'usu_df', 'red_usu_df', 'num_covpars')
+                 'post', 'restrimap', 'exptable', 'expcov', 'priorvals',
+                 'is_adj', 'usu_df', 'red_usu_df', 'num_covpars')
 
-# speed it up!
+# not used here, but to appease expectations of downstream scripts
 neg_log_prob_and_gradient = tf.function(post.neg_log_prob_and_gradient)
 neg_log_post_hessian = post.neg_log_prob_hessian
 
+# quantities used in GLS
 refvals = priorvals[is_adj]
+expvals = exptable.DATA.to_numpy()
+propfun = tf.function(restrimap.propagate)
+jacfun = tf.function(restrimap.jacobian)
 
-optres = determine_MAP_estimate(
-    refvals, neg_log_prob_and_gradient,
-    neg_log_post_hessian, max_inner_iters=500, max_outer_iters=50, nugget=1e-3,
-    ret_optres=True, must_converge=True
-)
+# GLS algo
+
+num_iters = 50
+tol = 1e-8
+solve = np.linalg.solve
+
+newvals = refvals.copy()
+
+for i in range(num_iters):
+    print(f'iteration {i}')
+    curvals = newvals
+    propvals = propfun(curvals).numpy()
+    S = tf.sparse.to_dense(jacfun(curvals)).numpy()
+    expcov_abs = expcov * (propvals.reshape(-1,1) * propvals.reshape(1,-1))
+    inv_postcov = S.T @ solve(expcov, S)
+    d = expvals.reshape(-1,1) - propvals.reshape(-1,1)
+    rhs = S.T @ solve(expcov_abs, d)
+    delta = solve(inv_postcov, rhs).flatten()
+    newvals = curvals + delta
+
+    relative_change = np.linalg.norm(delta) / np.linalg.norm(curvals)
+    print(f'relative change: {relative_change}')
+
+    if relative_change < tol:
+        break
+
+
+class DotDict:
+    """Dictionary with dot-access to keys."""
+    def __init__(self, **kwargs):
+        self.__dict__.update(**kwargs)
+
+
+optres = DotDict(position=newvals, converged=True)
+
 
 # save the optimized parameters
 refvals = optres.position
