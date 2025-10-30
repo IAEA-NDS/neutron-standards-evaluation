@@ -26,7 +26,7 @@ jacfun = tf.function(restrimap.jacobian)
 
 num_iters = 10
 tol = 1e-8
-damp_unc = 5  # 500% damping uncertainty
+damp_unc = 0.1  # 10% damping uncertainty
 solve = np.linalg.solve
 
 newvals = refvals.copy()
