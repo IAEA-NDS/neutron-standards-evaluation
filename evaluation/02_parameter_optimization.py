@@ -24,7 +24,7 @@ jacfun = tf.function(restrimap.jacobian)
 
 # GLS algo
 
-num_iters = 50
+num_iters = 10
 tol = 1e-8
 damp_unc = 5  # 500% damping uncertainty
 solve = np.linalg.solve
