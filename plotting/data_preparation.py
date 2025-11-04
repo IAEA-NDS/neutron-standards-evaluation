@@ -89,7 +89,10 @@ def prepare_result_data(git_hash, usu_info=False, extra_info=False):
         )
     chain, = load_objects(f'{curcalc}/03_mcmc_sampling_output.pkl', 'chain')
     optres, = load_objects(f'{curcalc}/02_parameter_optimization_output.pkl', 'optres')
-    eval_maxlike_raw = optres.position.numpy()
+    try:
+        eval_maxlike_raw = optres.position.numpy()
+    except:
+        eval_maxlike_raw = optres.position
 
     red_priortable = priortable.loc[is_adj, :].reset_index(drop=True)
 
