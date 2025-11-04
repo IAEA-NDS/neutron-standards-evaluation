@@ -2,7 +2,9 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 import tensorflow_probability as tfp
-from gmapy.tf_uq.inference import determine_MAP_estimate
+from gmapy.tf_uq.inference import (
+    iterative_gls_estimate,
+)
 from gmapy.data_management.object_utils import (
     load_objects, save_objects
 )
@@ -12,51 +14,22 @@ post, restrimap, exptable, expcov, priorvals, is_adj, usu_df, red_usu_df, num_co
                  'post', 'restrimap', 'exptable', 'expcov', 'priorvals',
                  'is_adj', 'usu_df', 'red_usu_df', 'num_covpars')
 
+
 # not used here, but to appease expectations of downstream scripts
 neg_log_prob_and_gradient = tf.function(post.neg_log_prob_and_gradient)
 neg_log_post_hessian = post.neg_log_prob_hessian
 
 # quantities used in GLS
 refvals = priorvals[is_adj]
-expvals = exptable.DATA.to_numpy()
-propfun = tf.function(restrimap.propagate)
-jacfun = tf.function(restrimap.jacobian)
+expvals = post.get_data_vector()
+propfun = post.get_model_prediction
+jacfun = post.get_model_jacobian
+cov_linop_fun = post.get_covariance_linop
 
 # GLS algo
-
-num_iters = 10
-tol = 1e-8
-solve = np.linalg.solve
-
-newvals = refvals.copy()
-
-for i in range(num_iters):
-    print(f'iteration {i}')
-    curvals = newvals
-    propvals = propfun(curvals).numpy()
-    S = tf.sparse.to_dense(jacfun(curvals)).numpy()
-    expcov_abs = expcov * (propvals.reshape(-1,1) * propvals.reshape(1,-1))
-    inv_postcov = S.T @ solve(expcov_abs, S)
-    d = expvals.reshape(-1,1) - propvals.reshape(-1,1)
-    rhs = S.T @ solve(expcov_abs, d)
-    delta = solve(inv_postcov, rhs).flatten()
-    newvals = curvals + delta
-
-    relative_change = np.linalg.norm(delta) / np.linalg.norm(curvals)
-    print(f'relative change: {relative_change}')
-
-    if relative_change < tol:
-        break
-
-
-class DotDict:
-    """Dictionary with dot-access to keys."""
-    def __init__(self, **kwargs):
-        self.__dict__.update(**kwargs)
-
-
-optres = DotDict(position=newvals, converged=True)
-
+optres = iterative_gls_estimate(
+    refvals, propfun, jacfun, expvals, cov_linop_fun, ret_optres=True
+)
 
 # save the optimized parameters
 refvals = optres.position

@@ -198,7 +198,7 @@ likelihood = ChiSquarePseudoDist(
 )
 
 # combine prior and likelihood into posterior
-post = UnnormalizedDistributionProduct([prior, likelihood])
+post = likelihood
 
 save_objects('output/01_model_preparation_output.pkl', locals(),
              'post', 'likelihood', 'priorvals', 'is_adj', 'usu_df', 'red_usu_df',
