@@ -54,7 +54,7 @@ exptable['UNC'] = np.sqrt(expcov.diagonal())
 
 # variation-01: remove specific experimental datasets after visual inspection
 exp_remove_mask = np.zeros(len(exptable), dtype=bool)
-exp_remove_mask |= exptable.REAC.str.match('MT:10-')
+
 exp_keep_idcs = np.where(~exp_remove_mask)[0]
 # variation-01 end
 
