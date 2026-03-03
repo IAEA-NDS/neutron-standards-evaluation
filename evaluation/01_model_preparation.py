@@ -40,9 +40,22 @@ tfd = tfp.distributions
 tfb = tfp.bijectors
 
 # retrieve prior estimates and covariances from the database
+db2017_path = '../data/data2017.gma'
+db2017 = read_gma_database(db2017_path)
+remove_dummy_datasets(db2017['datablock_list'])
+exptable2017 = create_experiment_table(db2017['datablock_list'])
+
 db_path = '../data/data.json'
 db = read_gma_database(db_path)
 remove_dummy_datasets(db['datablock_list'])
+
+# remove the SACS and SACS ratio data
+sacs_datablock = db['datablock_list'].pop(193)
+assert all('sacs' in x['quantity'] for x in sacs_datablock['datasets'])
+# replace by SACS data as used in STD2017
+sacs2017_datablock = db2017['datablock_list'].pop(55)
+db['datablock_list'].append(sacs2017_datablock)  # contains also some non-SACS data 
+                                                 # but I ignore this aspect
 
 priortable = create_prior_table(db['prior_list'])
 priorcov = create_prior_covmat(db['prior_list'])
@@ -72,14 +85,14 @@ def replace_mt(node, old_mt, new_mt):
     t = t.str.replace(rf'^MT:{old_mt}', f'MT:{new_mt}', regex=True)
     exptable.loc[exptable.NODE == node, 'REAC'] = t
 
-replace_mt('exp_602', 3, 4)
-replace_mt('exp_685', 3, 4)
-replace_mt('exp_605', 3, 4)
-replace_mt('exp_666', 3, 4)
-replace_mt('exp_600', 3, 4)
-replace_mt('exp_608', 3, 4)
-replace_mt('exp_631', 3, 4)
-replace_mt('exp_1012', 3, 4)
+# replace_mt('exp_602', 3, 4)
+# replace_mt('exp_685', 3, 4)
+# replace_mt('exp_605', 3, 4)
+# replace_mt('exp_666', 3, 4)
+# replace_mt('exp_600', 3, 4)
+# replace_mt('exp_608', 3, 4)
+# replace_mt('exp_631', 3, 4)
+# replace_mt('exp_1012', 3, 4)
 replace_mt('exp_6001', 4, 3)
 
 # speed up the pdf log_prob calculations exploiting the block diagonal structure
