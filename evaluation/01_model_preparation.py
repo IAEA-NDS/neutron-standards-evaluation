@@ -54,10 +54,9 @@ exptable['UNC'] = np.sqrt(expcov.diagonal())
 
 # variation-01: remove specific experimental datasets after visual inspection
 exp_remove_mask = np.zeros(len(exptable), dtype=bool)
-
+exp_remove_mask |= exptable.REAC.str.match('MT:10-')
 exp_keep_idcs = np.where(~exp_remove_mask)[0]
 # variation-01 end
-
 
 # remove requested indices from exptable and covariance matrix
 exptable = exptable.loc[exp_keep_idcs].reset_index(drop=True)
@@ -80,7 +79,8 @@ replace_mt('exp_600', 3, 4)
 replace_mt('exp_608', 3, 4)
 replace_mt('exp_631', 3, 4)
 replace_mt('exp_1012', 3, 4)
-replace_mt('exp_6001', 4, 3)
+# replace_mt('exp_6001', 4, 3)
+replace_mt('exp_6002', 3, 4)
 
 # speed up the pdf log_prob calculations exploiting the block diagonal structure
 block_lens = exptable['DB_IDX'].value_counts().sort_index().to_numpy()
