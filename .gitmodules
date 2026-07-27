@@ -1,3 +1,6 @@
 [submodule "gmapy"]
 	path = gmapy
 	url = ../gmapy/
+[submodule "datpy"]
+	path = datpy
+	url = https://github.com/iaea-nds/DATP-Python
