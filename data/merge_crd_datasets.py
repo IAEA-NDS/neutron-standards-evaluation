@@ -60,7 +60,10 @@ for key, lst in crd_dataset_map.items():
         new_lst.append(new_dataset)
         print(f'added new dataset {key} to GMA database')
 
-db['datablocks'] += list(new_blocks.values())
+db['datablocks'] += [
+    {'type': 'legacy-experiment-datablock', 'datasets': lst}
+    for lst in new_blocks.values()
+]
 
 
 # write to disk
