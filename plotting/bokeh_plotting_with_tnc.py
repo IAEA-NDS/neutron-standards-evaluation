@@ -173,6 +173,7 @@ def plot_expdata(figure, reac, expdata, datacol=None, include_usu=False):
     while len(colpal) < numgroups:
         colpal = colpal + colpal
     coldict = {k: colpal[i] for i, k in enumerate(grouped.groups.keys())}
+    scatter_renderers = []
     for node, curdt in grouped:
         curdt = curdt.copy()
         curlabel = node
@@ -185,8 +186,10 @@ def plot_expdata(figure, reac, expdata, datacol=None, include_usu=False):
         curdt['label'] = curlabel
         curdt['color'] = coldict[node]
         cursource = ColumnDataSource(data=curdt)
-        figure.scatter('ENERGY', datacol, size=10, source=cursource, color='color',
-                       legend_label=curlabel, level='underlay')
+        renderer = figure.scatter(
+            'ENERGY', datacol, size=10, source=cursource, color='color',
+            legend_label=curlabel, level='underlay')
+        scatter_renderers.append(renderer)
         err_xs = []
         err_ys = []
         uncvals = curdt['UNC_USU'] if include_usu else curdt['UNC']
@@ -194,11 +197,33 @@ def plot_expdata(figure, reac, expdata, datacol=None, include_usu=False):
         for x, y, yerr in zip(curdt['ENERGY'], curdt[datacol], uncvals):
             err_xs.append((x, x))
             err_ys.append((y-yerr, y+yerr))
-        figure.multi_line(err_xs, err_ys, color=coldict[node])
-        # hover = HoverTool(tooltips=[('Label', '@label')])
-        # figure.add_tools(hover)
-        # plt.errorbar(curdt.ENERGY, curdt.RENORM_DATA,
-        #              yerr=curdt.UNC, fmt='o', label=curlabel)
+        # same legend_label as the scatter glyph so both merge into one
+        # legend item and hide/show together on legend click
+        figure.multi_line(err_xs, err_ys, color=coldict[node],
+                          legend_label=curlabel, level='underlay')
+    hover = HoverTool(
+        renderers=scatter_renderers,
+        tooltips=[
+            ('dataset', '@label'),
+            ('energy', '@ENERGY{%.4g} MeV'),
+            (datacol.lower(), f'@{datacol}{{%.4f}}'),
+        ],
+        formatters={'@ENERGY': 'printf', f'@{datacol}': 'printf'},
+    )
+    figure.add_tools(hover)
+
+
+# helper function to style the legend: clickable entries (hide/show),
+# placed outside the plot area, split into columns if it grows too tall
+
+def style_legend(figure, max_rows=30):
+    if not figure.legend:
+        return
+    legend = figure.legend[0]
+    legend.click_policy = 'hide'
+    legend.label_text_font_size = '10pt'
+    legend.ncols = (len(legend.items) + max_rows - 1) // max_rows
+    figure.add_layout(legend, 'right')
 
 
 # helper function to plot evaluations
@@ -250,7 +275,7 @@ for curreac in pred_list[0]['pred_dt'].REAC.unique():
         curfigure.yaxis.axis_label_text_font_size = '20pt'
         curfigure.xaxis.major_label_text_font_size = '20pt'
         curfigure.yaxis.major_label_text_font_size = '20pt'
-        curfigure.legend.label_text_font_size = '15pt'
+        style_legend(curfigure)
         if mtnum in (1, 5):
             curfigure.yaxis.axis_label = 'xs relative to std2017'
         elif mtnum in (3,):
@@ -283,7 +308,7 @@ for curreac in pred_list[0]['pred_dt'].REAC.unique():
         curfigure.yaxis.axis_label_text_font_size = '20pt'
         curfigure.xaxis.major_label_text_font_size = '20pt'
         curfigure.yaxis.major_label_text_font_size = '20pt'
-        curfigure.legend.label_text_font_size = '15pt'
+        style_legend(curfigure)
         curfigure.yaxis.axis_label = 'uncertainty [percent]'
 
         figures[curreac] = subfigures
