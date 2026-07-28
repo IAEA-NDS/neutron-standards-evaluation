@@ -62,6 +62,13 @@ def load_std2017_data():
     descr_list.append(descr)
     outdt_list.append(pd.DataFrame({'NODE': 'exp_1006','REAC': mtdic[descr], 'ENERGY': tmp.En.to_numpy(), 'DATA': tmp['CS'].to_numpy(), 'UNC': tmp['DCS'].to_numpy(), 'DESCR': descr}))
 
+    tmp = pd.read_csv(
+        os.path.join(datadir, 'rec17-092_U_238g.txt'), comment='#', index_col=None, sep=r'\s+'
+    )
+    descr = 'U8(n,g)'
+    descr_list.append(descr)
+    outdt_list.append(pd.DataFrame({'NODE': 'exp_1007','REAC': mtdic[descr], 'ENERGY': tmp.En.to_numpy(), 'DATA': tmp['CS'].to_numpy(), 'UNC': tmp['DCS'].to_numpy(), 'DESCR': descr}))
+
 
     # now for the thermal neutron constants
     tmp = pd.read_csv(
