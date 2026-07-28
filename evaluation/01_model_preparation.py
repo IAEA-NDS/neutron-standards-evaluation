@@ -1,3 +1,10 @@
+import sys
+import pathlib
+# resolve gmapy to the submodule of this repository, which pins the
+# version with the vectorized compound map and exact Hessian support
+sys.path.insert(
+    0, (pathlib.Path(__file__).resolve().parents[1] / 'gmapy').as_posix()
+)
 import re
 import pandas as pd
 from scipy.sparse import block_diag, csr_matrix
@@ -12,8 +19,8 @@ from gmapy.data_management.uncfuns import (
     create_datablock_covmat_list,
     create_prior_covmat
 )
-from gmapy.mappings.tf.compound_map_tf \
-    import CompoundMap as CompoundMapTF
+from gmapy.mappings.tf.vectorized_compound_map_tf \
+    import VectorizedCompoundMap as CompoundMapTF
 from gmapy.data_management.database_IO import read_gma_database
 from gmapy.data_management.tablefuns import (
     create_prior_table,
@@ -117,7 +124,8 @@ adj_idcs = np.where(is_adj)[0]
 fixed_idcs = np.where(~is_adj)[0]
 restrimap = RestrictedMap(
     len(priorvals), compmap.propagate, compmap.jacobian,
-    fixed_params=priorvals[fixed_idcs], fixed_params_idcs=fixed_idcs
+    fixed_params=priorvals[fixed_idcs], fixed_params_idcs=fixed_idcs,
+    whessfun=compmap.weighted_row_hessian
 )
 propfun = tf.function(restrimap.propagate)
 jacfun = tf.function(restrimap.jacobian)
@@ -214,7 +222,8 @@ prior = DistributionForParameterSubset(
 # generate the likelihood
 likelihood = MultivariateNormalLikelihoodWithCovParams(
     len(adj_idcs), num_covpars, propfun, jacfun, expvals, like_cov_fun,
-    approximate_hessian=True, relative=True
+    approximate_hessian=False, relative=True,
+    whessfun=restrimap.weighted_hessian
 )
 
 # combine prior and likelihood into posterior

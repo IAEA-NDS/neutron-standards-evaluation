@@ -1,3 +1,10 @@
+import sys
+import pathlib
+# resolve gmapy to the submodule of this repository (must match the
+# version used to create the pickles loaded below)
+sys.path.insert(
+    0, (pathlib.Path(__file__).resolve().parents[1] / 'gmapy').as_posix()
+)
 import time
 import tensorflow as tf
 import tensorflow_probability as tfp
