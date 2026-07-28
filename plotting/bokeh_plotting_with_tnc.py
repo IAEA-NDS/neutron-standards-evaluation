@@ -258,9 +258,10 @@ for curreac in pred_list[0]['pred_dt'].REAC.unique():
     curtitle = get_human_readable_reaction_string(curreac, ref_priortable)
     curexptable = get_expdata_for_reaction(curreac, exptable, datacol='RATIO')
     if len(curexptable) > 0:
-        Emin = curexptable.ENERGY.min()
+        Emin = 2.53e-8  # thermal energy as common lower limit for all reactions
         Emax = curexptable.ENERGY.max()
-        curfigure = figure(title=curtitle, width=1500, height=800, toolbar_location='above', name=curreac, x_axis_type='log')
+        curfigure = figure(title=curtitle, width=1500, height=800, toolbar_location='above', name=curreac, x_axis_type='log',
+                           x_range=(Emin*0.5, Emax*2.0))
         subfigures.append(curfigure)
         for pred in pred_list:
             plot_evaluation(
@@ -283,7 +284,8 @@ for curreac in pred_list[0]['pred_dt'].REAC.unique():
         # save everything
 
         # figure with uncertainites
-        curfigure = figure(title=curtitle, width=1500, height=800, toolbar_location='above', name=curreac, x_axis_type='log')
+        curfigure = figure(title=curtitle, width=1500, height=800, toolbar_location='above', name=curreac, x_axis_type='log',
+                           x_range=(Emin*0.5, Emax*2.0))
         subfigures.append(curfigure)
         for pred in pred_list:
             t = pred['pred_dt']
