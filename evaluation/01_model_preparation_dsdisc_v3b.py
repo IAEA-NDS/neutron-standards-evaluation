@@ -41,7 +41,9 @@ from gmapy.tf_uq.custom_distributions import (
     MultivariateNormalLikelihoodWithCovParams,
     DistributionForParameterSubset,
     UnnormalizedDistributionProduct,
-    LogBarrier
+    LogBarrier,
+    SoftplusHalfNormal,
+    SoftplusHalfCauchy
 )
 from gmapy.tf_uq.covariance_models import LowRankCovarianceModel
 
@@ -165,16 +167,16 @@ expcov_linop = tf.linalg.LinearOperatorComposition(
     is_self_adjoint=True, is_positive_definite=True
 )
 
-# relevant USU error contributions
-# abs U5(n,f) at 1, 5, 15 MeV (clear USU around 2 MeV region)
-# abs PU9(n,f) at 1, 5 MeV (likely no USU but to be conservative)
-# shape U5(n,f) at 0, 1, 5, 15 MeV (likely USU in the low energy range (not thermal), at about 2 MeV nd at 15 MeV)
-# shape PU9(n,f) at 1, 5 MeV (likely USU at about 2 MeV)
-# MT:3-R1:10-R2:8 at 0, 1, 5, 15, 30, 100, 200
-# MT:3-R1:9-R2:8 at 0, 1, 5, 15, 30, 60
-# MT:4-R1:10-R2:8 at 1, 5 MeV (likely USU in 1-5 MeV range)
-# MT:4-R1:9-R2:8 at 0, 1, 5, 15 (likely USU at
-
+# ---------------------------------------------------------------
+# combined USU model (v2):
+#   (a) shared per-channel error bands on piecewise-linear energy
+#       knots -- the uncertainty floor that cannot be averaged away
+#   (b) per-dataset discrepancy components with smooth Legendre
+#       energy shapes -- arbitration between conflicting datasets;
+#       shape datasets (fitted normalization) get no constant mode
+# both parameterized via softplus magnitudes; the per-dataset part
+# additionally carries a weak half-normal restraint (see below)
+# ---------------------------------------------------------------
 usu_dfs = []
 usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:1-R1:8',), (5e-3, 1e-1, 1., 5., 15., 30.), (1e-2,)*6))
 usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:1-R1:9',), (5e-3, 1e-1, 1., 5., 15., 30.), (1e-2,)*6))
@@ -184,59 +186,111 @@ usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:3-R1:10-R2:8',), (0.1, 1.,
 usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:3-R1:9-R2:8',), (1e-3, 1e-2, 0.1, 1., 5., 15., 30., 60.), (1e-2,)*8))
 usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:4-R1:10-R2:8',), (0.1, 1., 5., 15., 30.), (1e-2,)*5))
 usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:4-R1:9-R2:8',), (1e-3, 1e-2, 1e-1, 1., 5., 15., 30.), (1e-2,)*7))
-usu_df = pd.concat(usu_dfs, ignore_index=True)
+usu_df_sh = pd.concat(usu_dfs, ignore_index=True)
+# NOTE: no per-dataset exemptions here (variation-01 removed some
+# datasets from the shared bands) -- dataset-specific behavior is the
+# job of the per-dataset components now
 
-# variation-01: remove usu treatment for specific datasets (after visual inspection of results)
-usu_df = usu_df[~(usu_df.NODE == 'endep_abs_usu_521')]
-usu_df = usu_df[~(usu_df.NODE == 'endep_abs_usu_1003')]
-usu_df = usu_df[~(usu_df.NODE == 'endep_abs_usu_1028')]
-# remove USU of NIFFTE TPC PU9/U5 fission measurement, believed to very accurate
-usu_df = usu_df[~(usu_df.NODE == 'endep_abs_usu_6001')]
-usu_df = usu_df[~(usu_df.NODE == 'endep_abs_usu_6002')]
-usu_df = usu_df.reset_index(drop=True)
-# variation-01: end
+usu_map = EnergyDependentAbsoluteUSUMap((usu_df_sh, exptable), reduce=True)
+usu_jac = tf.sparse.to_dense(usu_map.jacobian(usu_df_sh.PRIOR.to_numpy()))
 
-usu_map = EnergyDependentAbsoluteUSUMap((usu_df, exptable), reduce=True)
-usu_jac = tf.sparse.to_dense(usu_map.jacobian(usu_df.PRIOR.to_numpy()))
+red_sh = usu_df_sh[['REAC', 'ENERGY']].drop_duplicates()
+red_sh.sort_values(['REAC', 'ENERGY'], ascending=True,
+                   ignore_index=True, inplace=True)
+sh_ids = np.zeros((len(usu_df_sh),), dtype=np.int32)
+for index, row in red_sh.iterrows():
+    cur_idcs = usu_df_sh.index[
+        (usu_df_sh.REAC == row.REAC) & (usu_df_sh.ENERGY == row.ENERGY)
+    ].to_numpy()
+    sh_ids[cur_idcs] = index
+onehot = np.zeros((len(usu_df_sh), len(red_sh)))
+onehot[np.arange(len(usu_df_sh)), sh_ids] = 1.
+smat_shared_np = np.array(usu_jac) @ onehot
+n_shared = smat_shared_np.shape[1]
+
+# per-dataset Legendre discrepancy columns
+SHAPE_PREFIXES = ('MT:2-', 'MT:4-', 'MT:8-', 'MT:9-')
+node_arr = exptable.NODE.to_numpy().astype(str)
+reac_arr = exptable.REAC.to_numpy().astype(str)
+energy_arr = exptable.ENERGY.to_numpy().astype(float)
+
+smat_cols = []
+col2ds = []
+ds_records = []
+for nd in pd.unique(node_arr):
+    ridcs = np.where(node_arr == nd)[0]
+    reac = reac_arr[ridcs[0]]
+    is_shape = reac.startswith(SHAPE_PREFIXES)
+    en = energy_arr[ridcs]
+    loge = np.log10(np.maximum(en, 1e-12))
+    span = loge.max() - loge.min()
+    ndistinct = len(np.unique(loge))
+    if span > 1e-8 and ndistinct >= 2:
+        t = 2. * (loge - loge.min()) / span - 1.
+    else:
+        t = np.zeros_like(loge)
+    basis = [] if is_shape else [np.ones_like(t)]
+    if ndistinct >= 2 and span > 1e-8:
+        basis.append(t)
+    if ndistinct >= 3:
+        basis.append(0.5 * (3. * t**2 - 1.))
+    if not basis:
+        continue
+    for b in basis:
+        col = np.zeros(len(exptable))
+        col[ridcs] = b
+        smat_cols.append(col)
+        col2ds.append(len(ds_records))
+    ds_records.append({
+        'TYPE': 'dataset', 'NODE': nd, 'REAC': reac,
+        'ENERGY': np.nan, 'NPTS': len(ridcs), 'NCOLS': len(basis)
+    })
+
+smat_ds_np = np.stack(smat_cols, axis=1)
+col2ds = np.array(col2ds, dtype=np.int32)
+smat_np = np.hstack([smat_shared_np, smat_ds_np])
+col2par = np.concatenate(
+    [np.arange(n_shared, dtype=np.int32), n_shared + col2ds]
+)
+num_covpars = n_shared + len(ds_records) + 1  # +1: global scale tau
+
+sh_records = [
+    {'TYPE': 'shared', 'NODE': '', 'REAC': row.REAC,
+     'ENERGY': row.ENERGY, 'NPTS': 0, 'NCOLS': 1}
+    for _, row in red_sh.iterrows()
+]
+glob_records = [{'TYPE': 'global', 'NODE': '', 'REAC': '',
+                 'ENERGY': np.nan, 'NPTS': 0, 'NCOLS': 0}]
+red_usu_df = pd.DataFrame(sh_records + ds_records + glob_records)
+usu_df = red_usu_df
+print(f'horseshoe USU model: {n_shared} shared knots + '
+      f'{len(ds_records)} per-dataset bands, '
+      f'{smat_np.shape[1]} columns', flush=True)
 
 
-
-def create_like_cov_fun(usu_df, expcov_linop, Smat):
-    # a LowRankCovarianceModel provides the covariance matrix
-    # expcov + Smat diag(usu_unc^2) Smat^T as linear operator and
-    # fast closed-form covariance-parameter Hessian blocks
-    red_usu_df = usu_df[['REAC', 'ENERGY']].drop_duplicates()
-    red_usu_df.sort_values(
-        ['REAC', 'ENERGY'], ascending=True, ignore_index=True, inplace=True
-    )
-    ids = np.zeros((len(usu_df),), dtype=np.int32)
-    for index, row in red_usu_df.iterrows():
-        cur_idcs = usu_df.index[
-            (usu_df.REAC == row.REAC) & (usu_df.ENERGY == row.ENERGY)
-        ].to_numpy()
-        ids[cur_idcs] = index
-
-    # reaction-level (shared) USU construction: all datasets of a
-    # reaction share ONE energy-dependent error band, obtained by
-    # aggregating the per-dataset design matrix columns that belong
-    # to the same (REAC, ENERGY) knot. In contrast to independent
-    # per-dataset bands, the shared band cannot be averaged away by
-    # combining datasets and therefore acts as an uncertainty floor.
-    onehot = np.zeros((len(usu_df), len(red_usu_df)))
-    onehot[np.arange(len(usu_df)), ids] = 1.
-    smat_shared = tf.constant(
-        np.array(Smat) @ onehot, dtype=tf.float64
-    )
+def create_like_cov_fun(smat, colmap, n_shared, expcov_linop):
+    # regularized-horseshoe scales for the per-dataset columns:
+    #   sigma~^2 = c^2 tau^2 lambda^2 / (c^2 + tau^2 lambda^2)
+    # with local scales lambda_d = softplus(u_d), one global scale
+    # tau = softplus(u[-1]) and slab width c capping the tails
+    # (bounded soft rejection); shared floor columns keep plain
+    # softplus magnitudes
+    HS_SLAB = 0.3
+    shared_mask = colmap < n_shared
 
     def diag_fun(u):
-        return tf.square(u) + 1e-7
+        tau = tf.math.softplus(u[-1])
+        sp = tf.math.softplus(tf.gather(u, colmap))
+        tl2 = tf.square(tau * sp)
+        sig2_hs = HS_SLAB**2 * tl2 / (HS_SLAB**2 + tl2)
+        d = tf.where(shared_mask, tf.square(sp), sig2_hs)
+        return d + 1e-7
+    return LowRankCovarianceModel(
+        expcov_linop, tf.constant(smat, dtype=tf.float64), diag_fun
+    )
 
-    covmodel = LowRankCovarianceModel(expcov_linop, smat_shared, diag_fun)
-    return covmodel, red_usu_df
 
-
-like_cov_fun, red_usu_df = create_like_cov_fun(usu_df, expcov_linop, usu_jac)
-num_covpars = len(red_usu_df)
+like_cov_fun = create_like_cov_fun(smat_np, col2par, n_shared, expcov_linop)
 
 # generate the prior distribution
 is_adj_constr = is_adj & np.isfinite(priorcov.diagonal())
@@ -265,8 +319,26 @@ barrier_qmat = np.hstack(
 posbarrier = LogBarrier(barrier_qmat, strength=1e-4)
 
 # combine prior, likelihood and barrier into posterior
-post = UnnormalizedDistributionProduct([prior, likelihood, posbarrier])
+# regularized-horseshoe priors: half-Cauchy(1) on the per-dataset
+# local scales, half-Cauchy(tau_0) on the global scale; the shared
+# floor bands are left unrestrained
+lambda_idcs = len(adj_idcs) + n_shared \
+    + np.arange(num_covpars - n_shared - 1)
+tau_idx = np.array([len(adj_idcs) + num_covpars - 1])
+lambda_prior = DistributionForParameterSubset(
+    SoftplusHalfCauchy(1.0), len(adj_idcs) + num_covpars, lambda_idcs
+)
+# the global scale needs a proper anchoring prior under MAP: with a
+# half-Cauchy tail it runs away once many datasets carry large local
+# scales (slab saturation); a half-normal bounds it while leaving the
+# local half-Cauchy tails free to reach the slab where needed
+tau_prior = DistributionForParameterSubset(
+    SoftplusHalfNormal(0.05), len(adj_idcs) + num_covpars, tau_idx
+)
+post = UnnormalizedDistributionProduct(
+    [prior, likelihood, posbarrier, lambda_prior, tau_prior]
+)
 
 save_objects(f'{outdir}/01_model_preparation_output.pkl', locals(),
              'post', 'likelihood', 'priorvals', 'is_adj', 'usu_df', 'red_usu_df',
-             'num_covpars', 'priortable', 'exptable', 'expcov', 'like_cov_fun', 'compmap', 'restrimap')
+             'num_covpars', 'priortable', 'exptable', 'expcov', 'like_cov_fun', 'compmap', 'restrimap', 'smat_np', 'col2par', 'n_shared')

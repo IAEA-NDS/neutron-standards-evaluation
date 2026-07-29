@@ -165,78 +165,65 @@ expcov_linop = tf.linalg.LinearOperatorComposition(
     is_self_adjoint=True, is_positive_definite=True
 )
 
-# relevant USU error contributions
-# abs U5(n,f) at 1, 5, 15 MeV (clear USU around 2 MeV region)
-# abs PU9(n,f) at 1, 5 MeV (likely no USU but to be conservative)
-# shape U5(n,f) at 0, 1, 5, 15 MeV (likely USU in the low energy range (not thermal), at about 2 MeV nd at 15 MeV)
-# shape PU9(n,f) at 1, 5 MeV (likely USU at about 2 MeV)
-# MT:3-R1:10-R2:8 at 0, 1, 5, 15, 30, 100, 200
-# MT:3-R1:9-R2:8 at 0, 1, 5, 15, 30, 60
-# MT:4-R1:10-R2:8 at 1, 5 MeV (likely USU in 1-5 MeV range)
-# MT:4-R1:9-R2:8 at 0, 1, 5, 15 (likely USU at
+# ---------------------------------------------------------------
+# per-dataset discrepancy prototype: instead of shared per-channel
+# USU bands, every experimental dataset receives its own low-rank
+# discrepancy component with a smooth (up to quadratic Legendre)
+# energy shape over the dataset grid, all columns tied to a single
+# fitted magnitude u_ds. The log-determinant penalty lets only
+# datasets whose residuals exceed their stated uncertainties acquire
+# a band, so the fitted |u_ds| ranking identifies discrepant
+# ("culprit") datasets while stabilizing the GLS fit.
+# ---------------------------------------------------------------
+node_arr = exptable.NODE.to_numpy().astype(str)
+reac_arr = exptable.REAC.to_numpy().astype(str)
+energy_arr = exptable.ENERGY.to_numpy().astype(float)
 
-usu_dfs = []
-usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:1-R1:8',), (5e-3, 1e-1, 1., 5., 15., 30.), (1e-2,)*6))
-usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:1-R1:9',), (5e-3, 1e-1, 1., 5., 15., 30.), (1e-2,)*6))
-usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:2-R1:8',), (1e-3, 1e-2, 1e-1, 1., 5., 15., 30.), (1e-2,)*7))
-usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:2-R1:9',), (1e-3, 1e-2, 1e-1, 1., 5., 15., 30.), (1e-2,)*7))
-usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:3-R1:10-R2:8',), (0.1, 1., 5., 15., 30., 100., 200.), (1e-2,)*7))
-usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:3-R1:9-R2:8',), (1e-3, 1e-2, 0.1, 1., 5., 15., 30., 60.), (1e-2,)*8))
-usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:4-R1:10-R2:8',), (0.1, 1., 5., 15., 30.), (1e-2,)*5))
-usu_dfs.append(create_endep_abs_usu_df(exptable, ('MT:4-R1:9-R2:8',), (1e-3, 1e-2, 1e-1, 1., 5., 15., 30.), (1e-2,)*7))
-usu_df = pd.concat(usu_dfs, ignore_index=True)
+ds_nodes = pd.unique(node_arr)
+smat_cols = []
+col2ds = []
+ds_records = []
+for ids_, nd in enumerate(ds_nodes):
+    ridcs = np.where(node_arr == nd)[0]
+    en = energy_arr[ridcs]
+    loge = np.log10(np.maximum(en, 1e-12))
+    span = loge.max() - loge.min()
+    ndistinct = len(np.unique(loge))
+    if span > 1e-8 and ndistinct >= 2:
+        t = 2. * (loge - loge.min()) / span - 1.
+    else:
+        t = np.zeros_like(loge)
+    basis = [np.ones_like(t)]
+    if ndistinct >= 2 and span > 1e-8:
+        basis.append(t)
+    if ndistinct >= 3:
+        basis.append(0.5 * (3. * t**2 - 1.))
+    for b in basis:
+        col = np.zeros(len(exptable))
+        col[ridcs] = b
+        smat_cols.append(col)
+        col2ds.append(ids_)
+    ds_records.append({
+        'NODE': nd, 'REAC': reac_arr[ridcs[0]],
+        'NPTS': len(ridcs), 'NCOLS': len(basis)
+    })
 
-# variation-01: remove usu treatment for specific datasets (after visual inspection of results)
-usu_df = usu_df[~(usu_df.NODE == 'endep_abs_usu_521')]
-usu_df = usu_df[~(usu_df.NODE == 'endep_abs_usu_1003')]
-usu_df = usu_df[~(usu_df.NODE == 'endep_abs_usu_1028')]
-# remove USU of NIFFTE TPC PU9/U5 fission measurement, believed to very accurate
-usu_df = usu_df[~(usu_df.NODE == 'endep_abs_usu_6001')]
-usu_df = usu_df[~(usu_df.NODE == 'endep_abs_usu_6002')]
-usu_df = usu_df.reset_index(drop=True)
-# variation-01: end
-
-usu_map = EnergyDependentAbsoluteUSUMap((usu_df, exptable), reduce=True)
-usu_jac = tf.sparse.to_dense(usu_map.jacobian(usu_df.PRIOR.to_numpy()))
-
-
-
-def create_like_cov_fun(usu_df, expcov_linop, Smat):
-    # a LowRankCovarianceModel provides the covariance matrix
-    # expcov + Smat diag(usu_unc^2) Smat^T as linear operator and
-    # fast closed-form covariance-parameter Hessian blocks
-    red_usu_df = usu_df[['REAC', 'ENERGY']].drop_duplicates()
-    red_usu_df.sort_values(
-        ['REAC', 'ENERGY'], ascending=True, ignore_index=True, inplace=True
-    )
-    ids = np.zeros((len(usu_df),), dtype=np.int32)
-    for index, row in red_usu_df.iterrows():
-        cur_idcs = usu_df.index[
-            (usu_df.REAC == row.REAC) & (usu_df.ENERGY == row.ENERGY)
-        ].to_numpy()
-        ids[cur_idcs] = index
-
-    # reaction-level (shared) USU construction: all datasets of a
-    # reaction share ONE energy-dependent error band, obtained by
-    # aggregating the per-dataset design matrix columns that belong
-    # to the same (REAC, ENERGY) knot. In contrast to independent
-    # per-dataset bands, the shared band cannot be averaged away by
-    # combining datasets and therefore acts as an uncertainty floor.
-    onehot = np.zeros((len(usu_df), len(red_usu_df)))
-    onehot[np.arange(len(usu_df)), ids] = 1.
-    smat_shared = tf.constant(
-        np.array(Smat) @ onehot, dtype=tf.float64
-    )
-
-    def diag_fun(u):
-        return tf.square(u) + 1e-7
-
-    covmodel = LowRankCovarianceModel(expcov_linop, smat_shared, diag_fun)
-    return covmodel, red_usu_df
-
-
-like_cov_fun, red_usu_df = create_like_cov_fun(usu_df, expcov_linop, usu_jac)
+smat_ds = tf.constant(np.stack(smat_cols, axis=1), dtype=tf.float64)
+col2ds = np.array(col2ds, dtype=np.int32)
+red_usu_df = pd.DataFrame(ds_records)
+usu_df = red_usu_df
 num_covpars = len(red_usu_df)
+print(f'per-dataset discrepancy: {num_covpars} datasets, '
+      f'{smat_ds.shape[1]} columns')
+
+
+def create_like_cov_fun(smat, colmap, expcov_linop):
+    def diag_fun(u):
+        return tf.gather(tf.square(u), colmap) + 1e-7
+    return LowRankCovarianceModel(expcov_linop, smat, diag_fun)
+
+
+like_cov_fun = create_like_cov_fun(smat_ds, col2ds, expcov_linop)
 
 # generate the prior distribution
 is_adj_constr = is_adj & np.isfinite(priorcov.diagonal())
